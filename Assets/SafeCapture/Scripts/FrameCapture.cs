@@ -43,6 +43,12 @@ public class FrameCapture : MonoBehaviour
     public float   LastEncodeMs  { get; private set; }
     public void    ConsumeFrame() => HasNewFrame = false;
 
+    public int CaptureWidth  => _readbackTex != null ? _readbackTex.width  : 0;
+    public int CaptureHeight => _readbackTex != null ? _readbackTex.height : 0;
+
+    // Subscribers (e.g. BoxOverlay) may draw on the texture before JPEG encoding.
+    public event System.Action<Texture2D> PreEncodeFilter;
+
     // ── Private state ─────────────────────────────────────────────────────────
 
     // Render-camera path
@@ -235,6 +241,8 @@ public class FrameCapture : MonoBehaviour
     {
         try
         {
+            PreEncodeFilter?.Invoke(_readbackTex);
+
             var sw = System.Diagnostics.Stopwatch.StartNew();
             LatestFrame = ImageConversion.EncodeArrayToJPG(
                 _readbackTex.GetRawTextureData(),
