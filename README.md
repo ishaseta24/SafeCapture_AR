@@ -68,7 +68,7 @@ Browser
 ### Prerequisites
 
 - Meta Quest 3 with developer mode enabled
-- Unity 2022.3+ with Meta XR SDK
+- Unity 6000.0.55 with Meta XR SDK
 - Node.js 18+
 - ADB connected to Quest over USB or Wi-Fi
 

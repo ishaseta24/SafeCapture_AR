@@ -52,7 +52,7 @@ public class DepthDisplayDemo : MonoBehaviour
     {
         // In this example, we acquire the depth image from AR Foundation's occlusion
         // manager. This image has the same aspect ratio as the AR background image.
-        var texture = _occlusionManager.environmentDepthTexture;
+        _occlusionManager.TryGetEnvironmentDepthTexture(out var texture);
         if (texture == null)
         {
             return;
