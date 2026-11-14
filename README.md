@@ -56,8 +56,8 @@ Browser
 |---|---|---|
 | M1 | ✅ | MJPEG live stream from Quest 3 passthrough camera to browser |
 | M2 | ✅ | Meta SAM 3.1 integration — bounding boxes on detected objects |
-| M3 | 🔜 | PrivacyBlur — blur detected regions before streaming |
-| M4 | 🔜 | Local YOLO model — on-device detection, no cloud API required |
+| M3 | 🔜 | Local YOLO model — on-device detection, no cloud API required |
+| M4 | 🔜 | PrivacyBlur — blur detected regions before streaming |
 | M5 | 🔜 | Voice rules via Muse API — "blur all screens", "flag faces" |
 | M6 | 🔜 | 3D object persistence — track objects across frames in AR space |
 
@@ -123,7 +123,7 @@ Assets/SafeCapture/Scripts/
                   VisionResult.cs        result + bounding box structs
                   IVisionProvider.cs     provider interface
   Consumers/      BoxOverlay.cs          draws boxes on stream frame
-                  PrivacyBlur.cs         (stub — M3)
+                  PrivacyBlur.cs         (stub — M4)
                   IDetectionConsumer.cs  consumer interface
   FrameCapture.cs                        WebCamTexture → MJPEG pipeline
   StreamManager.cs                       server lifecycle
