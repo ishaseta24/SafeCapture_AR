@@ -1,6 +1,10 @@
 import sharp from 'sharp';
 import { MODEL_API_KEY, SAM_API_URL, MAX_IMAGE_WIDTH } from './config.js';
 
+// SAM box token grammar: <|box;x1=N;y1=N;x2=N;y2=N;w=W;h=H|>
+// w/h are the image dimensions SAM used — needed to scale back to original pixels.
+const BOX_RE = /(\d+)<\|box;x1=(\d+);y1=(\d+);x2=(\d+);y2=(\d+);w=(\d+);h=(\d+)\|>/g;
+
 // One SAM request per prompt (SAM rule), run in parallel.
 export async function detectObjects(imageJpegB64, prompts, originalWidth, originalHeight) {
   let processedB64 = imageJpegB64;
@@ -20,32 +24,35 @@ export async function detectObjects(imageJpegB64, prompts, originalWidth, origin
 
   const results = await Promise.all(prompts.map(p => callSam(processedB64, p)));
 
-  const scaleX = originalWidth  / scaledWidth;
-  const scaleY = originalHeight / scaledHeight;
-
-  return results.flatMap((items, i) =>
-    items.map(obj => ({
-      label: obj.label ?? prompts[i],
-      id:    obj.id   ?? i,
-      box: {
-        x1: Math.round((obj.box.x1 ?? 0) * scaleX),
-        y1: Math.round((obj.box.y1 ?? 0) * scaleY),
-        x2: Math.round((obj.box.x2 ?? 0) * scaleX),
-        y2: Math.round((obj.box.y2 ?? 0) * scaleY),
-      },
-    }))
+  return results.flatMap((items, promptIdx) =>
+    items.map(obj => {
+      // SAM w/h are the coordinate space of the image it received.
+      // Scale boxes back to original frame pixels.
+      const scaleX = originalWidth  / (obj._w || scaledWidth);
+      const scaleY = originalHeight / (obj._h || scaledHeight);
+      return {
+        label: prompts[promptIdx],
+        id:    obj.id,
+        box: {
+          x1: Math.round(obj.box.x1 * scaleX),
+          y1: Math.round(obj.box.y1 * scaleY),
+          x2: Math.round(obj.box.x2 * scaleX),
+          y2: Math.round(obj.box.y2 * scaleY),
+        },
+      };
+    })
   );
 }
 
 async function callSam(imageB64, prompt) {
-  // TODO(step 0): confirm exact request/response shape from raw test, then update here.
   const body = JSON.stringify({
     model: 'sam-3.1',
-    messages: [{
+    input: [{
+      type: 'message',
       role: 'user',
       content: [
-        { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${imageB64}` } },
-        { type: 'text', text: prompt },
+        { type: 'input_text',  text: prompt },
+        { type: 'input_image', image_url: `data:image/jpeg;base64,${imageB64}` },
       ],
     }],
   });
@@ -64,15 +71,23 @@ async function callSam(imageB64, prompt) {
     throw new Error(`SAM ${resp.status}: ${text.slice(0, 300)}`);
   }
 
-  return parseResponse(await resp.json(), prompt);
+  const data  = await resp.json();
+  const text  = data.output?.[0]?.content?.[0]?.text ?? '';
+  return parseBoxes(text);
 }
 
-function parseResponse(data, prompt) {
-  // Tolerant parser — update field names after step 0 raw test.
-  const items = data.detections ?? data.output ?? data.results ?? data.objects ?? [];
-  return items.map((item, i) => ({
-    label: item.label ?? item.class ?? item.category ?? prompt,
-    id:    item.id    ?? i,
-    box:   item.box   ?? item.bbox ?? item.bounding_box ?? { x1: 0, y1: 0, x2: 0, y2: 0 },
-  }));
+function parseBoxes(text) {
+  const boxes = [];
+  // Reset lastIndex since we reuse the regex across calls
+  BOX_RE.lastIndex = 0;
+  let m;
+  while ((m = BOX_RE.exec(text)) !== null) {
+    boxes.push({
+      id:  parseInt(m[1], 10),
+      box: { x1: parseInt(m[2], 10), y1: parseInt(m[3], 10), x2: parseInt(m[4], 10), y2: parseInt(m[5], 10) },
+      _w:  parseInt(m[6], 10),
+      _h:  parseInt(m[7], 10),
+    });
+  }
+  return boxes;
 }

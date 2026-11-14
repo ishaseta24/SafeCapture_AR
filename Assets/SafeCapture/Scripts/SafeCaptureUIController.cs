@@ -56,6 +56,10 @@ public class SafeCaptureUIController : MonoBehaviour
     [Header("Streaming")]
     [SerializeField] private StreamManager _streamManager;
 
+    [Header("Vision")]
+    [SerializeField] private Text             _visionStatusLabel;
+    [SerializeField] private VisionScheduler  _visionScheduler;
+
     // ── Unity lifecycle ───────────────────────────────────────────────────────
 
     private void Awake()
@@ -229,6 +233,10 @@ public class SafeCaptureUIController : MonoBehaviour
             _ipLabel.text = state == StreamManager.StreamState.Idle
                 ? "—"
                 : _streamManager.LocalUrl;
+
+        // Vision counter
+        if (_visionStatusLabel != null && _visionScheduler != null)
+            _visionStatusLabel.text = $"SAM  calls:{_visionScheduler.CallCount}  last:{_visionScheduler.LastObjectCount} obj  next:{_visionScheduler.NextCallIn:F0}s";
 
         // Viewer count
         if (_viewerCountLabel != null)
