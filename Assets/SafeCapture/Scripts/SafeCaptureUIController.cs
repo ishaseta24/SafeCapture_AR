@@ -61,6 +61,7 @@ public class SafeCaptureUIController : MonoBehaviour
 
     [Header("Vision")]
     [SerializeField] private Text             _visionStatusLabel;
+    [SerializeField] private Text             _detectionLogLabel;
     [SerializeField] private VisionScheduler  _visionScheduler;
 
     // ── Unity lifecycle ───────────────────────────────────────────────────────
@@ -123,13 +124,7 @@ public class SafeCaptureUIController : MonoBehaviour
         RefreshUI();
     }
 
-    private void Update()
-    {
-        // Live viewer count refresh while streaming
-        if (_streamManager != null &&
-            _streamManager.CurrentState == StreamManager.StreamState.Streaming)
-            RefreshUI();
-    }
+    private void Update() => RefreshUI();
 
     // ── Tab navigation ────────────────────────────────────────────────────────
 
@@ -249,7 +244,12 @@ public class SafeCaptureUIController : MonoBehaviour
 
         // Vision counter
         if (_visionStatusLabel != null && _visionScheduler != null)
-            _visionStatusLabel.text = $"SAM  calls:{_visionScheduler.CallCount}  last:{_visionScheduler.LastObjectCount} obj  next:{_visionScheduler.NextCallIn:F0}s";
+            _visionStatusLabel.text =
+                $"yolo - calls:{_visionScheduler.YoloCallCount}  obj:{_visionScheduler.YoloLastObjectCount}  {_visionScheduler.YoloLastLatencyMs:F0}ms\n" +
+                $"meta - calls:{_visionScheduler.SamCallCount}  obj:{_visionScheduler.SamLastObjectCount}  next:{_visionScheduler.SamNextAllowedIn:F0}s";
+
+        if (_detectionLogLabel != null && _visionScheduler != null)
+            _detectionLogLabel.text = _visionScheduler.StatusLog;
 
         // Viewer count
         if (_viewerCountLabel != null)
