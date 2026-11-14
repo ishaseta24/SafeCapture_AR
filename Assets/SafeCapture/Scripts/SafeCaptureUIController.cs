@@ -1,0 +1,253 @@
+using UnityEngine;
+using UnityEngine.UI;
+
+// Drop-in replacement for UIController, adapted for SafeCapture streaming.
+// Same panel/tab/collapse structure as the Niantic UIController.
+public class SafeCaptureUIController : MonoBehaviour
+{
+    // ── Identity ──────────────────────────────────────────────────────────────
+
+    [SerializeField] private string _title       = "SafeCapture";
+    [SerializeField] private string _description = "Privacy-safe live streaming from Quest 3";
+
+    [Header("Header")]
+    [SerializeField] private Text _titleText;
+    [SerializeField] private Text _descriptionText;
+
+    // ── Panel navigation (mirrors UIController) ───────────────────────────────
+
+    [Header("Panels")]
+    [SerializeField] private GameObject _panelsParent;
+    [SerializeField] private GameObject _overviewPanel;
+    [SerializeField] private GameObject _settingsPanel;
+    [SerializeField] private GameObject _infoPanel;
+
+    [Header("Tab Buttons")]
+    [SerializeField] private Button _overviewButton;
+    [SerializeField] private Button _settingsButton;
+    [SerializeField] private Button _infoButton;
+    [SerializeField] private Button _collapseButton;
+    [SerializeField] private Button _exitButton;
+
+    // ── Overview panel ────────────────────────────────────────────────────────
+
+    [Header("Overview — Status")]
+    [SerializeField] private Text _statusLabel;
+    [SerializeField] private Text _ipLabel;
+    [SerializeField] private Text _viewerCountLabel;
+
+    [Header("Overview — Streaming Controls")]
+    [SerializeField] private Button   _connectButton;
+    [SerializeField] private Text _connectButtonLabel;
+    [SerializeField] private Button   _startStreamButton;
+    [SerializeField] private Text _startStreamButtonLabel;
+
+    // ── Settings panel ────────────────────────────────────────────────────────
+
+    [Header("Settings — Frame Capture")]
+    [SerializeField] private Slider   _fpsSlider;
+    [SerializeField] private Text _fpsValueLabel;
+    [SerializeField] private Slider   _qualitySlider;
+    [SerializeField] private Text _qualityValueLabel;
+    [SerializeField] private FrameCapture _frameCapture;
+
+    // ── Streaming logic ───────────────────────────────────────────────────────
+
+    [Header("Streaming")]
+    [SerializeField] private StreamManager _streamManager;
+
+    // ── Unity lifecycle ───────────────────────────────────────────────────────
+
+    private void Awake()
+    {
+        if (_titleText       != null) _titleText.text       = _title;
+        if (_descriptionText != null) _descriptionText.text = _description;
+
+        _overviewButton?.onClick.AddListener(ShowOverview);
+        _settingsButton?.onClick.AddListener(ShowSettings);
+        _infoButton?.onClick.AddListener(ShowInfo);
+        _collapseButton?.onClick.AddListener(OnCollapseClicked);
+        _exitButton?.onClick.AddListener(OnExitClicked);
+
+        _connectButton?.onClick.AddListener(OnConnectClicked);
+        _startStreamButton?.onClick.AddListener(OnStartStreamClicked);
+
+        _fpsSlider?.onValueChanged.AddListener(OnFpsChanged);
+        _qualitySlider?.onValueChanged.AddListener(OnQualityChanged);
+    }
+
+    private void OnDisable()
+    {
+        _overviewButton?.onClick.RemoveListener(ShowOverview);
+        _settingsButton?.onClick.RemoveListener(ShowSettings);
+        _infoButton?.onClick.RemoveListener(ShowInfo);
+        _collapseButton?.onClick.RemoveListener(OnCollapseClicked);
+        _exitButton?.onClick.RemoveListener(OnExitClicked);
+
+        _connectButton?.onClick.RemoveListener(OnConnectClicked);
+        _startStreamButton?.onClick.RemoveListener(OnStartStreamClicked);
+
+        _fpsSlider?.onValueChanged.RemoveListener(OnFpsChanged);
+        _qualitySlider?.onValueChanged.RemoveListener(OnQualityChanged);
+    }
+
+    private void Start()
+    {
+        // Init sliders from FrameCapture defaults
+        if (_frameCapture != null)
+        {
+            if (_fpsSlider != null)
+            {
+                _fpsSlider.minValue = 1; _fpsSlider.maxValue = 60;
+                _fpsSlider.value = _frameCapture.TargetFps;
+                SetFpsLabel(_frameCapture.TargetFps);
+            }
+            if (_qualitySlider != null)
+            {
+                _qualitySlider.minValue = 10; _qualitySlider.maxValue = 100;
+                _qualitySlider.value = _frameCapture.JpegQuality;
+                SetQualityLabel(_frameCapture.JpegQuality);
+            }
+        }
+
+        ShowOverview();
+        RefreshUI();
+    }
+
+    private void Update()
+    {
+        // Live viewer count refresh while streaming
+        if (_streamManager != null &&
+            _streamManager.CurrentState == StreamManager.StreamState.Streaming)
+            RefreshUI();
+    }
+
+    // ── Tab navigation ────────────────────────────────────────────────────────
+
+    private void ShowOverview()
+    {
+        SetPanels(overview: true, settings: false, info: false);
+        RefreshUI();
+    }
+
+    private void ShowSettings()  => SetPanels(overview: false, settings: true,  info: false);
+    private void ShowInfo()      => SetPanels(overview: false, settings: false, info: true);
+
+    private void SetPanels(bool overview, bool settings, bool info)
+    {
+        if (_overviewPanel != null) _overviewPanel.SetActive(overview);
+        if (_settingsPanel != null) _settingsPanel.SetActive(settings);
+        if (_infoPanel     != null) _infoPanel.SetActive(info);
+    }
+
+    private void OnCollapseClicked()
+    {
+        if (_panelsParent == null) return;
+        bool nowActive = !_panelsParent.activeSelf;
+        _panelsParent.SetActive(nowActive);
+        if (_collapseButton != null)
+            _collapseButton.transform.localRotation =
+                Quaternion.AngleAxis(nowActive ? 90f : -90f, Vector3.forward);
+    }
+
+    private void OnExitClicked() => Application.Quit();
+
+    // ── Streaming button handlers ─────────────────────────────────────────────
+
+    private void OnConnectClicked()
+    {
+        if (_streamManager == null) return;
+
+        if (_streamManager.CurrentState == StreamManager.StreamState.Idle)
+            _streamManager.Connect();
+        else
+            _streamManager.Disconnect();
+
+        RefreshUI();
+    }
+
+    private void OnStartStreamClicked()
+    {
+        if (_streamManager == null) return;
+
+        if (_streamManager.CurrentState == StreamManager.StreamState.Listening)
+            _streamManager.StartStream();
+        else if (_streamManager.CurrentState == StreamManager.StreamState.Streaming)
+            _streamManager.StopStream();
+
+        RefreshUI();
+    }
+
+    // ── Settings handlers ─────────────────────────────────────────────────────
+
+    private void OnFpsChanged(float value)
+    {
+        int fps = Mathf.RoundToInt(value);
+        if (_frameCapture != null) _frameCapture.TargetFps = fps;
+        SetFpsLabel(fps);
+    }
+
+    private void OnQualityChanged(float value)
+    {
+        int quality = Mathf.RoundToInt(value);
+        if (_frameCapture != null) _frameCapture.JpegQuality = quality;
+        SetQualityLabel(quality);
+    }
+
+    private void SetFpsLabel(int fps)
+    {
+        if (_fpsValueLabel != null) _fpsValueLabel.text = $"{fps} fps";
+    }
+
+    private void SetQualityLabel(int quality)
+    {
+        if (_qualityValueLabel != null) _qualityValueLabel.text = $"{quality}%";
+    }
+
+    // ── UI refresh ────────────────────────────────────────────────────────────
+
+    private void RefreshUI()
+    {
+        if (_streamManager == null) return;
+
+        var state = _streamManager.CurrentState;
+
+        // Status label
+        int frames = _frameCapture != null ? _frameCapture.FrameCount : 0;
+        float encMs = _frameCapture != null ? _frameCapture.LastEncodeMs : 0f;
+        string status = state switch
+        {
+            StreamManager.StreamState.Idle      => "Idle",
+            StreamManager.StreamState.Listening => "Server ready\nWaiting for viewers...",
+            StreamManager.StreamState.Streaming => $"Streaming  •  {_streamManager.ViewerCount} viewer(s)\nFrame #{frames}  |  Encode: {encMs:F1} ms",
+            _                                   => ""
+        };
+        if (_statusLabel != null) _statusLabel.text = status;
+
+        // IP label
+        if (_ipLabel != null)
+            _ipLabel.text = state == StreamManager.StreamState.Idle
+                ? "—"
+                : _streamManager.LocalUrl;
+
+        // Viewer count
+        if (_viewerCountLabel != null)
+            _viewerCountLabel.text = state == StreamManager.StreamState.Streaming
+                ? $"{_streamManager.ViewerCount} viewer(s) connected"
+                : "";
+
+        // Connect button
+        if (_connectButtonLabel != null)
+            _connectButtonLabel.text = state == StreamManager.StreamState.Idle
+                ? "Connect"
+                : "Disconnect";
+
+        // Start/Stop stream button
+        bool canStream = state != StreamManager.StreamState.Idle;
+        if (_startStreamButton != null) _startStreamButton.interactable = canStream;
+        if (_startStreamButtonLabel != null)
+            _startStreamButtonLabel.text = state == StreamManager.StreamState.Streaming
+                ? "Stop Streaming"
+                : "Start Streaming";
+    }
+}
