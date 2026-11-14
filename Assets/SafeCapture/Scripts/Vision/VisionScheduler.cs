@@ -68,6 +68,7 @@ public class VisionScheduler : MonoBehaviour
     // ── Private state ─────────────────────────────────────────────────────────
 
     private SamRelayProvider _samProvider;
+    private readonly VisionObjectTracker _objectTracker = new VisionObjectTracker();
 
     private bool  _yoloInFlight;
     private float _nextYoloTime;
@@ -159,8 +160,15 @@ public class VisionScheduler : MonoBehaviour
                 }
             }
 
-            if (result == null) return;
+            if (result == null)
+            {
+                var selectionManager = GetComponent<ObjectSelectionManager>();
+                if (selectionManager != null)
+                    selectionManager.NotifyInferenceUnavailable();
+                return;
+            }
 
+            _objectTracker.Update(result);
             _latestYoloResult = result;
 
             string labels = result.objects?.Length > 0

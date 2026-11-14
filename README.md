@@ -9,9 +9,10 @@ SafeCapture streams the Quest 3 passthrough camera to any browser while running 
 ## What it does
 
 - **Live MJPEG stream** — Quest 3 passthrough camera → any browser over Wi-Fi, no app install needed
-- **AI object detection** — Quest sends frames to a local relay server, which calls Meta SAM 3.1 to detect objects by text prompt (e.g. "laptop screen", "phone screen")
-- **Bounding box overlay** — detected objects are drawn on the stream frame before encoding, visible in the browser viewer
-- **Privacy-first architecture** — frames never leave your local network; the relay runs on your laptop
+- **On-device object detection** — YOLOv8n detects supported COCO classes locally on Quest; optional SAM relay verification can confirm detections
+- **Selective privacy masking** — click detected boxes in the browser viewer to toggle pixelation for individual objects before JPEG encoding
+- **Fail-closed masking** — if a selected object is lost for more than two YOLO results, the outgoing frame is pixelated until it is reacquired or deselected
+- **Bounding box overlay** — detections are drawn on the stream frame before encoding, with selected objects outlined in cyan
 
 ---
 
@@ -33,11 +34,14 @@ Enter only if the Ray-Ban stream runs through the pipeline. The pitch becomes "p
 ```
 Quest 3 (Unity app)
   └─ FrameCapture        captures passthrough camera via WebCamTexture
-  └─ MjpegServer         streams JPEG frames to browser over HTTP
-  └─ VisionScheduler     sends frames to relay every N seconds
-       └─ SamRelayProvider  POST /detect → relay server
+  └─ VisionScheduler     runs local YOLO and schedules optional SAM verification
+       └─ YoloSentisProvider  YOLOv8n ONNX inference on device
+       └─ SamRelayProvider   POST /detect → relay server (optional verification)
+  └─ ObjectSelectionManager tracks selected detection IDs and lost-object state
+  └─ PrivacyBlur         pixelates selected boxes before JPEG encoding
+  └─ MjpegServer         streams frames and accepts browser selection clicks
 
-Relay (Node.js, runs on laptop)
+Optional relay (Node.js, runs on laptop)
   └─ POST /detect        receives base64 frame + prompts
   └─ sam.js              calls Meta SAM 3.1 API, parses <|box;...|> tokens
   └─ annotate.js         draws SVG overlay for debug frames (DEBUG_FRAMES=true)
@@ -56,8 +60,8 @@ Browser
 |---|---|---|
 | M1 | ✅ | MJPEG live stream from Quest 3 passthrough camera to browser |
 | M2 | ✅ | Meta SAM 3.1 integration — bounding boxes on detected objects |
-| M3 | 🔜 | Local YOLO model — on-device detection, no cloud API required |
-| M4 | 🔜 | PrivacyBlur — blur detected regions before streaming |
+| M3 | 🛠️ | Local YOLO model — on-device detection, no cloud API required |
+| M4 | 🛠️ | Browser selection and pre-stream pixelation for selected objects |
 | M5 | 🔜 | Voice rules via Muse API — "blur all screens", "flag faces" |
 | M6 | 🔜 | 3D object persistence — track objects across frames in AR space |
 
@@ -72,7 +76,9 @@ Browser
 - Node.js 18+
 - ADB connected to Quest over USB or Wi-Fi
 
-### 1. Configure the relay
+### 1. Configure the optional SAM relay
+
+This step is only needed for SAM verification. Local YOLO detection and object selection work without it.
 
 ```bash
 cd relay
@@ -109,7 +115,7 @@ adb push config.json /sdcard/Android/data/com.Ohlone.Quest/files/config.json
 - Tap **Connect** → note the IP shown → tap **Start Streaming**
 - Open `http://<quest-ip>:8080/` in a browser on your laptop
 
-Bounding boxes appear in the browser stream within the first SAM call (~30s by default, set `detectIntervalSec: 3` for production).
+YOLO bounding boxes appear in the browser stream after the first local inference. Click a box to toggle its mask; use **Clear selected objects** to remove all selections. SAM verification requires the optional relay configuration above.
 
 ---
 
@@ -119,13 +125,17 @@ Bounding boxes appear in the browser stream within the first SAM call (~30s by d
 Assets/SafeCapture/Scripts/
   Config/         AppConfig.cs           loads config.json from device or StreamingAssets
   Vision/         VisionScheduler.cs     timed detection loop
+                  VisionObjectTracker.cs assigns per-instance track IDs
                   SamRelayProvider.cs    HTTP client for /detect
+                  YoloSentisProvider.cs   local YOLOv8n ONNX inference
                   VisionResult.cs        result + bounding box structs
                   IVisionProvider.cs     provider interface
-  Consumers/      BoxOverlay.cs          draws boxes on stream frame
-                  PrivacyBlur.cs         (stub — M4)
+  Consumers/      BoxOverlay.cs          draws and highlights boxes on stream frame
+                  ObjectSelectionManager.cs browser selection and track state
+                  PrivacyBlur.cs         pixelates selected regions before encoding
                   IDetectionConsumer.cs  consumer interface
   FrameCapture.cs                        WebCamTexture → MJPEG pipeline
+  MjpegServer.cs                         MJPEG viewer + selection endpoint
   StreamManager.cs                       server lifecycle
   SafeCaptureUIController.cs             UI + SAM call counter
 

@@ -631,6 +631,8 @@ GameObject:
   - component: {fileID: 128625961}
   - component: {fileID: 128625960}
   - component: {fileID: 128625959}
+  - component: {fileID: 128625962}
+  - component: {fileID: 128625963}
   m_Layer: 0
   m_Name: VisionScheduler
   m_TagString: Untagged
@@ -670,6 +672,34 @@ MonoBehaviour:
   _yoloIntervalSec: 3
   _samVerifyIntervalSec: 5
   _verifyIouThreshold: 0.3
+--- !u!114 &128625962
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 128625958}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 197350fcb71444fab66b6d999aa2d276, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  _lostIntervalsBeforeFailClosed: 2
+--- !u!114 &128625963
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 128625958}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e0edc88835dc445cc8d3ecd77ddc7d44, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  _frameCapture: {fileID: 1281511375}
+  _blockSize: 16
+  _paddingPixels: 8
 --- !u!4 &128625961
 Transform:
   m_ObjectHideFlags: 0
@@ -4857,6 +4887,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _frameCapture: {fileID: 1281511375}
+  _selectionManager: {fileID: 128625962}
 --- !u!114 &1281511379
 MonoBehaviour:
   m_ObjectHideFlags: 0
