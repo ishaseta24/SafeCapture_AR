@@ -29,8 +29,8 @@ public class MjpegServer : MonoBehaviour
     private readonly List<ClientContext>   _clients     = new List<ClientContext>();
     private readonly object                _clientsLock = new object();
     private byte[]                         _sharedFrame;
+    private volatile int                   _frameVersion;
     private readonly object                _frameLock   = new object();
-    private readonly ManualResetEventSlim  _frameReady  = new ManualResetEventSlim(false);
 
     // ── Unity lifecycle ───────────────────────────────────────────────────────
 
@@ -55,15 +55,12 @@ public class MjpegServer : MonoBehaviour
         if (frame == null || frame.Length == 0) return;
 
         lock (_frameLock) _sharedFrame = frame;
-
-        _frameReady.Set();
-        _frameReady.Reset();
+        _frameVersion++;
     }
 
     private void OnDestroy()
     {
         _running = false;
-        _frameReady.Set();
         _listener?.Stop();
         _acceptThread?.Join(1000);
         lock (_clientsLock)
@@ -151,12 +148,18 @@ public class MjpegServer : MonoBehaviour
             $"Content-Type: multipart/x-mixed-replace; boundary={Boundary}\r\n" +
             "Cache-Control: no-cache\r\n" +
             "Connection: close\r\n\r\n";
-        byte[] respBytes = Encoding.ASCII.GetBytes(respHeader);
-        ns.Write(respBytes, 0, respBytes.Length);
+        ns.Write(Encoding.ASCII.GetBytes(respHeader));
 
+        int lastVersion = -1;
         while (_running && ctx.Tcp.Connected)
         {
-            _frameReady.Wait(500);
+            int v = _frameVersion;
+            if (v == lastVersion)
+            {
+                Thread.Sleep(4); // ~240 fps poll ceiling, no busy-spin
+                continue;
+            }
+            lastVersion = v;
 
             byte[] jpeg;
             lock (_frameLock) jpeg = _sharedFrame;
