@@ -36,6 +36,9 @@ public class SafeCaptureUIController : MonoBehaviour
     [SerializeField] private Text _ipLabel;
     [SerializeField] private Text _viewerCountLabel;
 
+    [Header("Overview — IP")]
+    [SerializeField] private Button _refreshIpButton;
+
     [Header("Overview — Streaming Controls")]
     [SerializeField] private Button   _connectButton;
     [SerializeField] private Text _connectButtonLabel;
@@ -73,6 +76,7 @@ public class SafeCaptureUIController : MonoBehaviour
         _collapseButton?.onClick.AddListener(OnCollapseClicked);
         _exitButton?.onClick.AddListener(OnExitClicked);
 
+        _refreshIpButton?.onClick.AddListener(OnRefreshIpClicked);
         _connectButton?.onClick.AddListener(OnConnectClicked);
         _startStreamButton?.onClick.AddListener(OnStartStreamClicked);
 
@@ -88,6 +92,7 @@ public class SafeCaptureUIController : MonoBehaviour
         _collapseButton?.onClick.RemoveListener(OnCollapseClicked);
         _exitButton?.onClick.RemoveListener(OnExitClicked);
 
+        _refreshIpButton?.onClick.RemoveListener(OnRefreshIpClicked);
         _connectButton?.onClick.RemoveListener(OnConnectClicked);
         _startStreamButton?.onClick.RemoveListener(OnStartStreamClicked);
 
@@ -155,6 +160,14 @@ public class SafeCaptureUIController : MonoBehaviour
     }
 
     private void OnExitClicked() => Application.Quit();
+
+    // ── IP refresh ────────────────────────────────────────────────────────────
+
+    private void OnRefreshIpClicked()
+    {
+        _streamManager?.RefreshIp();
+        RefreshUI();
+    }
 
     // ── Streaming button handlers ─────────────────────────────────────────────
 

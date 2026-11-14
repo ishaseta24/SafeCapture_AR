@@ -24,6 +24,12 @@ public class StreamManager : MonoBehaviour
 
     // ── Public API ────────────────────────────────────────────────────────────
 
+    public void RefreshIp()
+    {
+        LocalUrl = $"http://{GetLocalIPAddress()}:{NetworkConfig.StreamPort}/";
+        Debug.Log($"[StreamManager] IP refreshed → {LocalUrl}");
+    }
+
     public void Connect()
     {
         if (CurrentState != StreamState.Idle) return;
