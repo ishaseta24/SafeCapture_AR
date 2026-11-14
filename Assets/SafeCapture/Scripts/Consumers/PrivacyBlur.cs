@@ -1,6 +1,6 @@
 using UnityEngine;
 
-// Placeholder — blurs detected regions in the stream frame (step 5).
+// Placeholder — blurs detected regions in the stream frame (M4).
 // Enable _active after BoxOverlay is verified correct.
 public class PrivacyBlur : MonoBehaviour, IDetectionConsumer
 {
