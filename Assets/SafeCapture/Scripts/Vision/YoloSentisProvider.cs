@@ -15,7 +15,7 @@ public class YoloSentisProvider : MonoBehaviour, IVisionProvider
     [SerializeField] private float       _iouThreshold        = 0.45f;
     [SerializeField] private int         _maxDetections       = 20;
     [Tooltip("Only detect these labels. Leave empty to detect all 80 COCO classes.")]
-    [SerializeField] private string[]    _targetLabels        = { "person", "chair", "laptop", "tv", "cell phone", "cup", "bottle" };
+    [SerializeField] private string[]    _targetLabels        = { "person", "hand", "chair", "laptop", "tv", "cell phone", "cup", "bottle", "water bottle" };
 
     private const int InputSize = 640;
 
@@ -119,14 +119,21 @@ public class YoloSentisProvider : MonoBehaviour, IVisionProvider
 
             if (maxScore < _confidenceThreshold) continue;
 
-            // Filter to target labels if list is non-empty
+            // Filter to target labels if list is non-empty.
+            // Match if: Contains (bidirectional) OR Levenshtein distance ≤ 2.
             string detectedLabel = CocoLabels.Get(maxCls);
             if (_targetLabels != null && _targetLabels.Length > 0)
             {
+                string detected = detectedLabel.Trim().ToLowerInvariant();
                 bool inList = false;
                 foreach (var t in _targetLabels)
-                    if (string.Equals(t, detectedLabel, System.StringComparison.OrdinalIgnoreCase))
+                {
+                    string target = (t ?? "").Trim().ToLowerInvariant();
+                    if (target.Length == 0) continue;
+                    if (detected.Contains(target) || target.Contains(detected)
+                        || Levenshtein(detected, target) <= 2)
                     { inList = true; break; }
+                }
                 if (!inList) continue;
             }
 
@@ -169,6 +176,20 @@ public class YoloSentisProvider : MonoBehaviour, IVisionProvider
                     suppressed[j] = true;
         }
         return kept;
+    }
+
+    private static int Levenshtein(string a, string b)
+    {
+        int m = a.Length, n = b.Length;
+        var d = new int[m + 1, n + 1];
+        for (int i = 0; i <= m; i++) d[i, 0] = i;
+        for (int j = 0; j <= n; j++) d[0, j] = j;
+        for (int i = 1; i <= m; i++)
+            for (int j = 1; j <= n; j++)
+                d[i, j] = a[i-1] == b[j-1]
+                    ? d[i-1, j-1]
+                    : 1 + Mathf.Min(d[i-1, j], Mathf.Min(d[i, j-1], d[i-1, j-1]));
+        return d[m, n];
     }
 
     private static float IoU(BoundingBox a, BoundingBox b)

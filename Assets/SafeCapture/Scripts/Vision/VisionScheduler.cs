@@ -10,11 +10,12 @@ using UnityEngine;
 // Verified → green box.  False detection → hidden.
 public class VisionScheduler : MonoBehaviour
 {
+    [SerializeField] private StreamManager      _streamManager;
     [SerializeField] private FrameCapture       _frameCapture;
     [SerializeField] private YoloSentisProvider _yoloProvider;
     [SerializeField] private float              _yoloIntervalSec    = 1f;
-    [SerializeField] private float              _samVerifyIntervalSec = 5f;
-    [SerializeField] private float              _verifyIouThreshold = 0.3f;
+    [SerializeField] private float              _samVerifyIntervalSec = 15f;
+    [SerializeField] private float              _verifyIouThreshold = 0.1f;
 
     // ── Public stats ──────────────────────────────────────────────────────────
 
@@ -25,6 +26,36 @@ public class VisionScheduler : MonoBehaviour
     public int   SamCallCount       { get; private set; }
     public int   SamLastObjectCount { get; private set; }
     public float SamNextAllowedIn   { get; private set; }
+
+    public bool  YoloPaused { get; private set; }
+    public bool  SamPaused  { get; private set; }
+
+    public void ToggleYolo()
+    {
+        YoloPaused = !YoloPaused;
+        if (YoloPaused)
+        {
+            // Clear stream overlay immediately
+            _latestYoloResult = null;
+            _latestFrame      = null;
+            BroadcastResult(new VisionResult { objects = new VisionObject[0] });
+        }
+    }
+
+    public void ToggleSam()
+    {
+        SamPaused = !SamPaused;
+        if (SamPaused && _latestYoloResult?.objects != null)
+        {
+            // Reset verification — show all as unverified yellow, nothing hidden
+            foreach (var o in _latestYoloResult.objects)
+            {
+                o.verified       = false;
+                o.falseDetection = false;
+            }
+            BroadcastResult(_latestYoloResult);
+        }
+    }
 
     public string ProviderName { get; private set; } = "—";
     public string StatusLog    { get; private set; } = "";
@@ -66,8 +97,22 @@ public class VisionScheduler : MonoBehaviour
     {
         SamNextAllowedIn = Mathf.Max(0f, _nextSamVerifyTime - Time.time);
 
+        bool isStreaming = _streamManager != null
+            && _streamManager.CurrentState == StreamManager.StreamState.Streaming;
+
+        if (!isStreaming)
+        {
+            if (_latestYoloResult != null)
+            {
+                _latestYoloResult = null;
+                _latestFrame      = null;
+                BroadcastResult(new VisionResult { objects = new VisionObject[0] });
+            }
+            return;
+        }
+
         // YOLO dispatch
-        if (!_yoloInFlight && Time.time >= _nextYoloTime
+        if (!YoloPaused && !_yoloInFlight && Time.time >= _nextYoloTime
             && _frameCapture != null && _frameCapture.LatestFrame != null)
         {
             _nextYoloTime = Time.time + Mathf.Max(0.1f, _yoloIntervalSec);
@@ -76,8 +121,8 @@ public class VisionScheduler : MonoBehaviour
                              _frameCapture.CaptureHeight);
         }
 
-        // SAM verification (runs even while YOLO is in flight)
-        if (!_samInFlight && Time.time >= _nextSamVerifyTime
+        // SAM verification
+        if (!SamPaused && !_samInFlight && Time.time >= _nextSamVerifyTime
             && _latestYoloResult?.objects?.Length > 0 && _latestFrame != null)
             _ = VerifyWithSam();
     }

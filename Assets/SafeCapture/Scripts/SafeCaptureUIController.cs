@@ -63,6 +63,10 @@ public class SafeCaptureUIController : MonoBehaviour
     [SerializeField] private Text             _visionStatusLabel;
     [SerializeField] private Text             _detectionLogLabel;
     [SerializeField] private VisionScheduler  _visionScheduler;
+    [SerializeField] private Button           _pauseYoloButton;
+    [SerializeField] private Text             _pauseYoloLabel;
+    [SerializeField] private Button           _pauseSamButton;
+    [SerializeField] private Text             _pauseSamLabel;
 
     // ── Unity lifecycle ───────────────────────────────────────────────────────
 
@@ -83,6 +87,9 @@ public class SafeCaptureUIController : MonoBehaviour
 
         _fpsSlider?.onValueChanged.AddListener(OnFpsChanged);
         _qualitySlider?.onValueChanged.AddListener(OnQualityChanged);
+
+        _pauseYoloButton?.onClick.AddListener(OnPauseYoloClicked);
+        _pauseSamButton?.onClick.AddListener(OnPauseSamClicked);
     }
 
     private void OnDisable()
@@ -99,6 +106,9 @@ public class SafeCaptureUIController : MonoBehaviour
 
         _fpsSlider?.onValueChanged.RemoveListener(OnFpsChanged);
         _qualitySlider?.onValueChanged.RemoveListener(OnQualityChanged);
+
+        _pauseYoloButton?.onClick.RemoveListener(OnPauseYoloClicked);
+        _pauseSamButton?.onClick.RemoveListener(OnPauseSamClicked);
     }
 
     private void Start()
@@ -155,6 +165,18 @@ public class SafeCaptureUIController : MonoBehaviour
     }
 
     private void OnExitClicked() => Application.Quit();
+
+    private void OnPauseYoloClicked()
+    {
+        _visionScheduler?.ToggleYolo();
+        RefreshUI();
+    }
+
+    private void OnPauseSamClicked()
+    {
+        _visionScheduler?.ToggleSam();
+        RefreshUI();
+    }
 
     // ── IP refresh ────────────────────────────────────────────────────────────
 
@@ -250,6 +272,14 @@ public class SafeCaptureUIController : MonoBehaviour
 
         if (_detectionLogLabel != null && _visionScheduler != null)
             _detectionLogLabel.text = _visionScheduler.StatusLog;
+
+        if (_visionScheduler != null)
+        {
+            if (_pauseYoloLabel != null)
+                _pauseYoloLabel.text = _visionScheduler.YoloPaused ? "Resume YOLO" : "Pause YOLO";
+            if (_pauseSamLabel != null)
+                _pauseSamLabel.text  = _visionScheduler.SamPaused  ? "Resume Meta" : "Pause Meta";
+        }
 
         // Viewer count
         if (_viewerCountLabel != null)
