@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/ishaseta/OhloneARTourUnity/Assets/Scripts/**)",
+      "Read(//Users/ishaseta/OhloneARTourUnity/Assets/Scenes/Fountain Stop/**)",
+      "Read(//Users/ishaseta/OhloneARTourUnity/ProjectSettings/**)"
+    ]
+  }
+}
