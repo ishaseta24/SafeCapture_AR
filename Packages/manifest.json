@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "com.unity.ai.inference": "2.2.1",
     "com.meta.xr.sdk.core": "201.0.0",
     "com.nianticspatial.nsdk": "https://github.com/nianticspatial/nsdk-library-upm.git",
     "org.khronos.unitygltf": "https://github.com/KhronosGroup/UnityGLTF.git",

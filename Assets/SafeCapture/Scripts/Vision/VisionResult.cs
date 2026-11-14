@@ -16,6 +16,10 @@ public class VisionObject
     public string      label;
     public int         id;
     public BoundingBox box;
+
+    // Set by VisionScheduler after SAM verification — not in JSON
+    [System.NonSerialized] public bool verified;
+    [System.NonSerialized] public bool falseDetection;
 }
 
 [Serializable]

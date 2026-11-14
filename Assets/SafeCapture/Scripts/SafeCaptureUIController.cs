@@ -61,7 +61,12 @@ public class SafeCaptureUIController : MonoBehaviour
 
     [Header("Vision")]
     [SerializeField] private Text             _visionStatusLabel;
+    [SerializeField] private Text             _detectionLogLabel;
     [SerializeField] private VisionScheduler  _visionScheduler;
+    [SerializeField] private Button           _pauseYoloButton;
+    [SerializeField] private Text             _pauseYoloLabel;
+    [SerializeField] private Button           _pauseSamButton;
+    [SerializeField] private Text             _pauseSamLabel;
 
     // ── Unity lifecycle ───────────────────────────────────────────────────────
 
@@ -82,6 +87,9 @@ public class SafeCaptureUIController : MonoBehaviour
 
         _fpsSlider?.onValueChanged.AddListener(OnFpsChanged);
         _qualitySlider?.onValueChanged.AddListener(OnQualityChanged);
+
+        _pauseYoloButton?.onClick.AddListener(OnPauseYoloClicked);
+        _pauseSamButton?.onClick.AddListener(OnPauseSamClicked);
     }
 
     private void OnDisable()
@@ -98,6 +106,9 @@ public class SafeCaptureUIController : MonoBehaviour
 
         _fpsSlider?.onValueChanged.RemoveListener(OnFpsChanged);
         _qualitySlider?.onValueChanged.RemoveListener(OnQualityChanged);
+
+        _pauseYoloButton?.onClick.RemoveListener(OnPauseYoloClicked);
+        _pauseSamButton?.onClick.RemoveListener(OnPauseSamClicked);
     }
 
     private void Start()
@@ -123,13 +134,7 @@ public class SafeCaptureUIController : MonoBehaviour
         RefreshUI();
     }
 
-    private void Update()
-    {
-        // Live viewer count refresh while streaming
-        if (_streamManager != null &&
-            _streamManager.CurrentState == StreamManager.StreamState.Streaming)
-            RefreshUI();
-    }
+    private void Update() => RefreshUI();
 
     // ── Tab navigation ────────────────────────────────────────────────────────
 
@@ -160,6 +165,18 @@ public class SafeCaptureUIController : MonoBehaviour
     }
 
     private void OnExitClicked() => Application.Quit();
+
+    private void OnPauseYoloClicked()
+    {
+        _visionScheduler?.ToggleYolo();
+        RefreshUI();
+    }
+
+    private void OnPauseSamClicked()
+    {
+        _visionScheduler?.ToggleSam();
+        RefreshUI();
+    }
 
     // ── IP refresh ────────────────────────────────────────────────────────────
 
@@ -249,7 +266,20 @@ public class SafeCaptureUIController : MonoBehaviour
 
         // Vision counter
         if (_visionStatusLabel != null && _visionScheduler != null)
-            _visionStatusLabel.text = $"SAM  calls:{_visionScheduler.CallCount}  last:{_visionScheduler.LastObjectCount} obj  next:{_visionScheduler.NextCallIn:F0}s";
+            _visionStatusLabel.text =
+                $"yolo - calls:{_visionScheduler.YoloCallCount}  obj:{_visionScheduler.YoloLastObjectCount}  {_visionScheduler.YoloLastLatencyMs:F0}ms\n" +
+                $"meta - calls:{_visionScheduler.SamCallCount}  obj:{_visionScheduler.SamLastObjectCount}  next:{_visionScheduler.SamNextAllowedIn:F0}s";
+
+        if (_detectionLogLabel != null && _visionScheduler != null)
+            _detectionLogLabel.text = _visionScheduler.StatusLog;
+
+        if (_visionScheduler != null)
+        {
+            if (_pauseYoloLabel != null)
+                _pauseYoloLabel.text = _visionScheduler.YoloPaused ? "Resume YOLO" : "Pause YOLO";
+            if (_pauseSamLabel != null)
+                _pauseSamLabel.text  = _visionScheduler.SamPaused  ? "Resume Meta" : "Pause Meta";
+        }
 
         // Viewer count
         if (_viewerCountLabel != null)
