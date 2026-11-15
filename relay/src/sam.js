@@ -26,8 +26,6 @@ export async function detectObjects(imageJpegB64, prompts, originalWidth, origin
 
   return results.flatMap((items, promptIdx) =>
     items.map(obj => {
-      // SAM w/h are the coordinate space of the image it received.
-      // Scale boxes back to original frame pixels.
       const scaleX = originalWidth  / (obj._w || scaledWidth);
       const scaleY = originalHeight / (obj._h || scaledHeight);
       return {
@@ -71,14 +69,15 @@ async function callSam(imageB64, prompt) {
     throw new Error(`SAM ${resp.status}: ${text.slice(0, 300)}`);
   }
 
-  const data  = await resp.json();
-  const text  = data.output?.[0]?.content?.[0]?.text ?? '';
+  const data = await resp.json();
+  const text = data.output?.[0]?.content?.[0]?.text ?? '';
+  // Phase 1 discovery: log raw SAM output to reveal any token types beyond boxes.
+  console.log('[SAM raw]', text.slice(0, 500));
   return parseBoxes(text);
 }
 
 function parseBoxes(text) {
   const boxes = [];
-  // Reset lastIndex since we reuse the regex across calls
   BOX_RE.lastIndex = 0;
   let m;
   while ((m = BOX_RE.exec(text)) !== null) {

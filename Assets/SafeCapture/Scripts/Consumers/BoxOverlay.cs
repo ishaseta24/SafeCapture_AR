@@ -1,7 +1,7 @@
 using UnityEngine;
 
 // Draws bounding boxes + labels onto the stream frame before JPEG encoding.
-// Cyan = user selected   Green = SAM verified   Yellow = unverified (YOLO only)
+// Cyan = user selected   Green = YOLO+SAM   Yellow = YOLO only   Blue = SAM only
 [DefaultExecutionOrder(100)]
 public class BoxOverlay : MonoBehaviour, IDetectionConsumer
 {
@@ -10,6 +10,7 @@ public class BoxOverlay : MonoBehaviour, IDetectionConsumer
 
     private static readonly Color Verified   = Color.green;
     private static readonly Color Unverified = Color.yellow;
+    private static readonly Color SamOnly    = Color.blue;
     private static readonly Color BgColor    = new Color(0f, 0f, 0f, 1f);
     private static readonly Color TextColor  = Color.white;
 
@@ -45,7 +46,28 @@ public class BoxOverlay : MonoBehaviour, IDetectionConsumer
             bool selected = _selectionManager != null && _selectionManager.IsSelected(obj.track_id);
             if (obj.falseDetection && !selected) continue;
 
-            var boxColor = selected ? Color.cyan : (obj.verified ? Verified : Unverified);
+            Color boxColor;
+            string tag;
+            if (selected)
+            {
+                boxColor = Color.cyan;
+                tag      = "SELECTED " + obj.label;
+            }
+            else if (obj.samOnly)
+            {
+                boxColor = SamOnly;
+                tag      = obj.label + " (meta)";
+            }
+            else if (obj.verified)
+            {
+                boxColor = Verified;
+                tag      = obj.label;
+            }
+            else
+            {
+                boxColor = Unverified;
+                tag      = obj.label + "?";
+            }
 
             int x1  = Mathf.Clamp((int)obj.box.x1, 0, tex.width  - 1);
             int x2  = Mathf.Clamp((int)obj.box.x2, 0, tex.width  - 1);
@@ -53,11 +75,6 @@ public class BoxOverlay : MonoBehaviour, IDetectionConsumer
             int ty2 = Mathf.Clamp(tex.height - 1 - (int)obj.box.y1, 0, tex.height - 1);
 
             DrawRect(tex, x1, x2, ty1, ty2, boxColor);
-
-            // Label above box — baseline of label = ty2 + 1
-            string tag = selected
-                ? "SELECTED " + obj.label
-                : (obj.verified ? obj.label : obj.label + "?");
             PixelFont.DrawStringBg(tex, tag, x1, ty2 + 1, TextColor, BgColor, _labelScale);
         }
 

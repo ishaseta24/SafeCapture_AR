@@ -20,9 +20,17 @@ public class VisionObject
     public float       confidence;
     public BoundingBox box;
 
-    // Set by VisionScheduler after SAM verification — not in JSON
-    [System.NonSerialized] public bool verified;
-    [System.NonSerialized] public bool falseDetection;
+    // Pixel-perfect mask from relay (packed 1-bit-per-pixel, row-major).
+    // maskB64 decoded into mask[] by SamRelayProvider after JSON parse.
+    public string maskB64;
+    public int    maskW;
+    public int    maskH;
+
+    // Set by VisionScheduler after SAM merge — not in JSON
+    [System.NonSerialized] public bool   verified;      // found by both YOLO and SAM → green
+    [System.NonSerialized] public bool   samOnly;       // found by SAM only → distinct color
+    [System.NonSerialized] public bool   falseDetection;
+    [System.NonSerialized] public bool[] mask;          // decoded from maskB64; null = no mask
 }
 
 [Serializable]

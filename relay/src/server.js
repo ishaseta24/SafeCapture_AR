@@ -3,10 +3,13 @@ import express from 'express';
 import { requireToken }            from './auth.js';
 import { acquireSlot, releaseSlot, MAX_PROMPTS } from './limits.js';
 import { detectObjects }           from './sam.js';
+import { generateMask }            from './mask.js';
 import { saveDebugFrame }          from './annotate.js';
 import { logCall }                 from './log.js';
 import { PORT }                    from './config.js';
 import { transcribeVoice, VoiceTranscriptionError } from './voice.js';
+
+let maskInFlight = false;
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
@@ -46,6 +49,37 @@ app.post('/detect', requireToken, async (req, res) => {
   if (error) return res.status(502).json({ error });
 
   res.json({ frame_id, width, height, latency_ms: latencyMs, objects });
+});
+
+// Pixel-mask endpoint — no cloud call, just sharp/Otsu on the relay CPU.
+// Accepts YOLO bounding boxes and returns packed 1-bit masks for each object.
+app.post('/mask', requireToken, async (req, res) => {
+  const { frame_id, image_jpeg_b64, objects, width = 1280, height = 720 } = req.body;
+
+  if (!image_jpeg_b64 || !Array.isArray(objects) || objects.length === 0)
+    return res.status(400).json({ error: 'Missing image_jpeg_b64 or objects' });
+
+  if (maskInFlight) return res.status(429).json({ error: 'Mask request in flight' });
+  maskInFlight = true;
+
+  const t0  = Date.now();
+  const buf = Buffer.from(image_jpeg_b64, 'base64');
+
+  try {
+    const masked = await Promise.all(objects.map(async obj => {
+      try {
+        const m = await generateMask(buf, obj.box, width, height);
+        if (m) return { ...obj, maskB64: m.maskB64, maskW: m.maskW, maskH: m.maskH };
+      } catch (e) {
+        console.warn('[mask] failed for', obj.label, ':', e.message);
+      }
+      return obj;
+    }));
+
+    res.json({ frame_id, width, height, latency_ms: Date.now() - t0, objects: masked });
+  } finally {
+    maskInFlight = false;
+  }
 });
 
 app.post('/voice/transcribe', requireToken,

@@ -8,7 +8,10 @@ public class SamRelayProvider : IVisionProvider
 {
     private static int _frameCounter;
 
-    public async Task<VisionResult> DetectAsync(byte[] jpegBytes, int originalWidth, int originalHeight)
+    public Task<VisionResult> DetectAsync(byte[] jpegBytes, int originalWidth, int originalHeight)
+        => DetectAsync(jpegBytes, originalWidth, originalHeight, null);
+
+    public async Task<VisionResult> DetectAsync(byte[] jpegBytes, int originalWidth, int originalHeight, string[] prompts)
     {
         var cfg = AppConfig.Instance;
         if (!cfg.IsConfigured)
@@ -17,12 +20,15 @@ public class SamRelayProvider : IVisionProvider
             return null;
         }
 
+        // Use caller-supplied prompts (YOLO-detected labels) or fall back to full class list.
+        var activePrompts = (prompts != null && prompts.Length > 0) ? prompts : cfg.prompts;
+
         string frameId = (++_frameCounter).ToString();
         var payload = new DetectRequest
         {
             frame_id       = frameId,
             image_jpeg_b64 = Convert.ToBase64String(jpegBytes),
-            prompts        = cfg.prompts,
+            prompts        = activePrompts,
             width          = originalWidth,
             height         = originalHeight,
         };
@@ -46,11 +52,35 @@ public class SamRelayProvider : IVisionProvider
                 return null;
             }
 
-            return JsonUtility.FromJson<VisionResult>(req.downloadHandler.text);
+            var result = JsonUtility.FromJson<VisionResult>(req.downloadHandler.text);
+            DecodeMasks(result);
+            return result;
         }
         finally
         {
             req.Dispose();
+        }
+    }
+
+    // Unpack the 1-bit-per-pixel base64 mask sent by the relay into a flat bool[].
+    private static void DecodeMasks(VisionResult result)
+    {
+        if (result?.objects == null) return;
+        foreach (var obj in result.objects)
+        {
+            if (string.IsNullOrEmpty(obj.maskB64) || obj.maskW <= 0 || obj.maskH <= 0) continue;
+            try
+            {
+                byte[] packed = Convert.FromBase64String(obj.maskB64);
+                int total = obj.maskW * obj.maskH;
+                obj.mask = new bool[total];
+                for (int i = 0; i < total; i++)
+                    obj.mask[i] = (packed[i >> 3] & (1 << (7 - (i & 7)))) != 0;
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[SamRelayProvider] mask decode failed for '{obj.label}': {e.Message}");
+            }
         }
     }
 
