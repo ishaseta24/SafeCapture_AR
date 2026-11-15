@@ -74,6 +74,9 @@ public class SafeCaptureUIController : MonoBehaviour
     [SerializeField] private InputField       _samIntervalInput;
     [SerializeField] private Button           _applySamTimingButton;
 
+    [Header("Side Status Panel")]
+    [SerializeField] private Text             _sideStatusLabel;
+
     [Header("Voice Commands")]
     [SerializeField] private VoiceCommandRecognizer _voiceRecognizer;
     private Button _voiceRecordButton;
@@ -357,6 +360,61 @@ public class SafeCaptureUIController : MonoBehaviour
             _startStreamButtonLabel.text = state == StreamManager.StreamState.Streaming
                 ? "Stop Streaming"
                 : "Start Streaming";
+
+        // Side status panel
+        if (_sideStatusLabel != null)
+            _sideStatusLabel.text = BuildSideStatus(state, frames, encMs);
+    }
+
+    private string BuildSideStatus(StreamManager.StreamState state, int frames, float encMs)
+    {
+        var sb = new System.Text.StringBuilder();
+
+        // ── Stream ──
+        sb.AppendLine("── Stream ──");
+        sb.AppendLine($"State:   {state}");
+        if (state == StreamManager.StreamState.Streaming)
+        {
+            sb.AppendLine($"Frames:  {frames}");
+            sb.AppendLine($"Encode:  {encMs:F1} ms");
+            sb.AppendLine($"Viewers: {_streamManager.ViewerCount}");
+        }
+
+        if (_visionScheduler == null) return sb.ToString();
+
+        // ── YOLO ──
+        sb.AppendLine();
+        sb.AppendLine("── YOLO ──");
+        sb.AppendLine($"Status:   {(_visionScheduler.YoloPaused ? "Paused" : "Running")}");
+        sb.AppendLine($"Interval: {_visionScheduler.YoloIntervalSec:F1}s");
+        sb.AppendLine($"Calls:    {_visionScheduler.YoloCallCount}");
+        sb.AppendLine($"Objects:  {_visionScheduler.YoloLastObjectCount}");
+        sb.AppendLine($"Latency:  {_visionScheduler.YoloLastLatencyMs:F0} ms");
+
+        // ── Meta SAM ──
+        sb.AppendLine();
+        sb.AppendLine("── Meta SAM ──");
+        sb.AppendLine($"Status:   {(_visionScheduler.SamPaused ? "Paused" : "Running")}");
+        sb.AppendLine($"Interval: {_visionScheduler.SamVerifyIntervalSec:F0}s");
+        sb.AppendLine($"Calls:    {_visionScheduler.SamCallCount}");
+        sb.AppendLine($"Objects:  {_visionScheduler.SamLastObjectCount}");
+        sb.AppendLine($"Next in:  {_visionScheduler.SamNextAllowedIn:F0}s");
+
+        // ── Detections ──
+        var result = _visionScheduler.LatestResult;
+        if (result?.objects != null && result.objects.Length > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("── Detections ──");
+            foreach (var obj in result.objects)
+            {
+                if (obj == null) continue;
+                string state2 = obj.falseDetection ? "✗" : obj.verified ? "✓" : "?";
+                sb.AppendLine($"{state2} {obj.label}");
+            }
+        }
+
+        return sb.ToString();
     }
 
     private void EnsureVoiceControls()
