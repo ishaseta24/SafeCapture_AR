@@ -17,6 +17,7 @@ public sealed class VoiceCommandRecognizer : MonoBehaviour
     private const int MaxUploadBytes = 1024 * 1024;
 
     [SerializeField] private ObjectSelectionManager _selectionManager;
+    [SerializeField] private VisionScheduler _visionScheduler;
 
     private AudioClip _recording;
     private bool _permissionPending;
@@ -216,6 +217,12 @@ public sealed class VoiceCommandRecognizer : MonoBehaviour
             if (_selectionManager == null)
             {
                 SetStatus("Voice command could not be applied: masking is unavailable.");
+                return;
+            }
+
+            if (_visionScheduler == null || !_visionScheduler.EnsureDetectionLabel(command.Label))
+            {
+                SetStatus("Object detection is unavailable. No mask rule was applied.");
                 return;
             }
 

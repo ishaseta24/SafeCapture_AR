@@ -4943,6 +4943,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier:
   _selectionManager: {fileID: 128625962}
+  _visionScheduler: {fileID: 128625960}
 --- !u!1 &1287110836
 GameObject:
   m_ObjectHideFlags: 0

@@ -18,10 +18,22 @@ public class YoloSentisProvider : MonoBehaviour, IVisionProvider
     [SerializeField] private string[]    _targetLabels        = { "hand", "laptop", "tv", "cell phone", "cup", "bottle", "water bottle", "book", "remote", "apple" };
 
     private const int InputSize = 640;
+    private readonly HashSet<string> _runtimeTargetLabels =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
     private Worker    _worker;
     private Texture2D _inputTex;
     private float[]   _tensorData;
+
+    public bool AddRuntimeTargetLabel(string label)
+    {
+        string canonical;
+        if (!CocoLabels.TryNormalizeVoiceName(label, out canonical))
+            return false;
+
+        _runtimeTargetLabels.Add(canonical);
+        return true;
+    }
 
     private void Awake()
     {
@@ -122,7 +134,8 @@ public class YoloSentisProvider : MonoBehaviour, IVisionProvider
             // Filter to target labels if list is non-empty.
             // Match if: Contains (bidirectional) OR Levenshtein distance ≤ 2.
             string detectedLabel = CocoLabels.Get(maxCls);
-            if (_targetLabels != null && _targetLabels.Length > 0)
+            if (_targetLabels != null && _targetLabels.Length > 0
+                && !_runtimeTargetLabels.Contains(detectedLabel))
             {
                 string detected = detectedLabel.Trim().ToLowerInvariant();
                 bool inList = false;

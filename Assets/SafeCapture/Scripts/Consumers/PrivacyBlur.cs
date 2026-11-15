@@ -77,7 +77,10 @@ public class PrivacyBlur : MonoBehaviour, IDetectionConsumer
         {
             foreach (var obj in result.objects)
             {
-                if (obj == null || obj.box == null || obj.falseDetection) continue;
+                if (obj == null || obj.box == null) continue;
+                if (obj.falseDetection && (_selectionManager == null
+                    || _selectionManager.GetClassMaskOverride(obj.label) != ClassMaskOverride.Mask))
+                    continue;
 
                 // Normalize box to [0-1]
                 float tnx1 = obj.box.x1 / result.width;
@@ -240,7 +243,7 @@ public class PrivacyBlur : MonoBehaviour, IDetectionConsumer
         float scaleY = (float)texture.height / result.height;
         foreach (VisionObject obj in result.objects)
         {
-            if (obj == null || obj.box == null || obj.falseDetection
+            if (obj == null || obj.box == null
                 || _selectionManager.GetClassMaskOverride(obj.label) != ClassMaskOverride.Mask)
                 continue;
 
@@ -265,7 +268,7 @@ public class PrivacyBlur : MonoBehaviour, IDetectionConsumer
         float scaleY = (float)texture.height / result.height;
         foreach (VisionObject obj in result.objects)
         {
-            if (obj == null || obj.box == null || obj.falseDetection
+            if (obj == null || obj.box == null
                 || _selectionManager.GetClassMaskOverride(obj.label) != ClassMaskOverride.Unmask)
                 continue;
 
