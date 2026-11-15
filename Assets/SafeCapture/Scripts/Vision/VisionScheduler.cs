@@ -13,7 +13,7 @@ public class VisionScheduler : MonoBehaviour
     [SerializeField] private StreamManager      _streamManager;
     [SerializeField] private FrameCapture       _frameCapture;
     [SerializeField] private YoloSentisProvider _yoloProvider;
-    [SerializeField] private float              _yoloIntervalSec    = 1f;
+    [SerializeField] private float              _yoloIntervalSec    = 0.2f;
     [SerializeField] private float              _samVerifyIntervalSec = 15f;
     [SerializeField] private float              _verifyIouThreshold = 0.1f;
 
@@ -29,6 +29,21 @@ public class VisionScheduler : MonoBehaviour
 
     public bool  YoloPaused { get; private set; }
     public bool  SamPaused  { get; private set; }
+
+    public float YoloIntervalSec    => _yoloIntervalSec;
+    public float SamVerifyIntervalSec => _samVerifyIntervalSec;
+
+    public void SetYoloInterval(float seconds)
+    {
+        _yoloIntervalSec = Mathf.Max(0.1f, seconds);
+    }
+
+    public void SetSamInterval(float seconds)
+    {
+        _samVerifyIntervalSec = Mathf.Max(1f, seconds);
+        // Reset next verify time so change takes effect immediately
+        _nextSamVerifyTime = Time.time + _samVerifyIntervalSec;
+    }
 
     public void ToggleYolo()
     {
