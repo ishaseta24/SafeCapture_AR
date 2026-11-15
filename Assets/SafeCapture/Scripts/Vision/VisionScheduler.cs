@@ -13,7 +13,7 @@ public class VisionScheduler : MonoBehaviour
     [SerializeField] private StreamManager      _streamManager;
     [SerializeField] private FrameCapture       _frameCapture;
     [SerializeField] private YoloSentisProvider _yoloProvider;
-    [SerializeField] private float              _yoloIntervalSec    = 1f;
+    [SerializeField] private float              _yoloIntervalSec    = 0.2f;
     [SerializeField] private float              _samVerifyIntervalSec = 15f;
     [SerializeField] private float              _verifyIouThreshold = 0.1f;
 
@@ -29,6 +29,21 @@ public class VisionScheduler : MonoBehaviour
 
     public bool  YoloPaused { get; private set; }
     public bool  SamPaused  { get; private set; }
+
+    public float YoloIntervalSec    => _yoloIntervalSec;
+    public float SamVerifyIntervalSec => _samVerifyIntervalSec;
+
+    public void SetYoloInterval(float seconds)
+    {
+        _yoloIntervalSec = Mathf.Max(0.1f, seconds);
+    }
+
+    public void SetSamInterval(float seconds)
+    {
+        _samVerifyIntervalSec = Mathf.Max(1f, seconds);
+        // Reset next verify time so change takes effect immediately
+        _nextSamVerifyTime = Time.time + _samVerifyIntervalSec;
+    }
 
     public void ToggleYolo()
     {
@@ -68,6 +83,7 @@ public class VisionScheduler : MonoBehaviour
     // ── Private state ─────────────────────────────────────────────────────────
 
     private SamRelayProvider _samProvider;
+    private readonly VisionObjectTracker _objectTracker = new VisionObjectTracker();
 
     private bool  _yoloInFlight;
     private float _nextYoloTime;
@@ -159,8 +175,15 @@ public class VisionScheduler : MonoBehaviour
                 }
             }
 
-            if (result == null) return;
+            if (result == null)
+            {
+                var selectionManager = GetComponent<ObjectSelectionManager>();
+                if (selectionManager != null)
+                    selectionManager.NotifyInferenceUnavailable();
+                return;
+            }
 
+            _objectTracker.Update(result);
             _latestYoloResult = result;
 
             string labels = result.objects?.Length > 0

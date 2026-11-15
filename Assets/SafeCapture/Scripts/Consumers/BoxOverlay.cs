@@ -1,7 +1,8 @@
 using UnityEngine;
 
 // Draws bounding boxes + labels onto the stream frame before JPEG encoding.
-// Green  = SAM verified   Yellow = unverified (YOLO only)   Hidden = SAM marked false
+// Cyan = user selected   Green = SAM verified   Yellow = unverified (YOLO only)
+[DefaultExecutionOrder(100)]
 public class BoxOverlay : MonoBehaviour, IDetectionConsumer
 {
     [SerializeField] private FrameCapture _frameCapture;
@@ -13,7 +14,10 @@ public class BoxOverlay : MonoBehaviour, IDetectionConsumer
     private static readonly Color TextColor  = Color.white;
 
     private VisionResult _latest;
+    private ObjectSelectionManager _selectionManager;
     private readonly object _lock = new object();
+
+    private void Awake() => _selectionManager = GetComponent<ObjectSelectionManager>();
 
     private void OnEnable()
     {
@@ -38,9 +42,10 @@ public class BoxOverlay : MonoBehaviour, IDetectionConsumer
 
         foreach (var obj in result.objects)
         {
-            if (obj.falseDetection) continue;
+            bool selected = _selectionManager != null && _selectionManager.IsSelected(obj.track_id);
+            if (obj.falseDetection && !selected) continue;
 
-            var boxColor = obj.verified ? Verified : Unverified;
+            var boxColor = selected ? Color.cyan : (obj.verified ? Verified : Unverified);
 
             int x1  = Mathf.Clamp((int)obj.box.x1, 0, tex.width  - 1);
             int x2  = Mathf.Clamp((int)obj.box.x2, 0, tex.width  - 1);
@@ -50,7 +55,9 @@ public class BoxOverlay : MonoBehaviour, IDetectionConsumer
             DrawRect(tex, x1, x2, ty1, ty2, boxColor);
 
             // Label above box — baseline of label = ty2 + 1
-            string tag = obj.verified ? obj.label : obj.label + "?";
+            string tag = selected
+                ? "SELECTED " + obj.label
+                : (obj.verified ? obj.label : obj.label + "?");
             PixelFont.DrawStringBg(tex, tag, x1, ty2 + 1, TextColor, BgColor, _labelScale);
         }
 

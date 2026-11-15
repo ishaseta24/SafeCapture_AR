@@ -14,7 +14,10 @@ public class VisionResult
 public class VisionObject
 {
     public string      label;
-    public int         id;
+    public int         id; // Legacy alias for the model class ID.
+    public int         class_id;
+    public int         track_id;
+    public float       confidence;
     public BoundingBox box;
 
     // Set by VisionScheduler after SAM verification — not in JSON

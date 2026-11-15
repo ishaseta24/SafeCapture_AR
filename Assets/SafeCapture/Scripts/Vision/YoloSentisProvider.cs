@@ -15,7 +15,7 @@ public class YoloSentisProvider : MonoBehaviour, IVisionProvider
     [SerializeField] private float       _iouThreshold        = 0.45f;
     [SerializeField] private int         _maxDetections       = 20;
     [Tooltip("Only detect these labels. Leave empty to detect all 80 COCO classes.")]
-    [SerializeField] private string[]    _targetLabels        = { "person", "hand", "chair", "laptop", "tv", "cell phone", "cup", "bottle", "water bottle" };
+    [SerializeField] private string[]    _targetLabels        = { "hand", "laptop", "tv", "cell phone", "cup", "bottle", "water bottle", "book", "remote", "apple" };
 
     private const int InputSize = 640;
 
@@ -155,8 +155,15 @@ public class YoloSentisProvider : MonoBehaviour, IVisionProvider
         var result = new VisionObject[kept.Count];
         for (int i = 0; i < kept.Count; i++)
         {
-            var (box, _, cls) = kept[i];
-            result[i] = new VisionObject { label = CocoLabels.Get(cls), id = cls, box = box };
+            var (box, score, cls) = kept[i];
+            result[i] = new VisionObject
+            {
+                label = CocoLabels.Get(cls),
+                id = cls,
+                class_id = cls,
+                confidence = score,
+                box = box
+            };
         }
         return result;
     }
