@@ -1,0 +1,20 @@
+{
+  "name": "safecapture-mentra-laptop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "start": "node src/server.js",
+    "start:usb": "HOST=127.0.0.1 node src/server.js",
+    "dev": "node --watch src/server.js",
+    "check": "node --check src/server.js && node --check src/photo-upload.js && node --check src/pipeline.js && node --check src/privacy.js && node --check src/postprocess.js && node --check src/vision.js && node --check src/viewers.js"
+  },
+  "dependencies": {
+    "busboy": "^1.6.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "onnxruntime-node": "^1.22.0",
+    "sharp": "^0.35.5"
+  }
+}

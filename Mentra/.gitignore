@@ -1,0 +1,15 @@
+# Local credentials and private capture data
+.env
+.env.*
+!.env.example
+debug/
+logs/
+captures/
+
+# Dependencies and generated builds
+node_modules/
+.build/
+DerivedData/
+build/
+xcuserdata/
+*.xcuserstate
