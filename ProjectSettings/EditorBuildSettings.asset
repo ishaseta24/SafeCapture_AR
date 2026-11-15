@@ -75,6 +75,9 @@ EditorBuildSettings:
   - enabled: 0
     path: Assets/Samples/Niantic Spatial SDK Meta Plugin/4.1.0-26051913/Samples/VPS/Scenes/VPSLocalization.unity
     guid: 557a3a3fa75464629a86f4f21c52907e
+  - enabled: 1
+    path: Assets/SafeCapture/Scenes/SafeCapture.unity
+    guid: fa71f193c36754abd8e815eebeb7745e
   m_configObjects:
     NianticSpatial.NSDK.AR.AuthBuildSettings: {fileID: 11400000, guid: 88b479b42654f4c6e87b428536faa118, type: 2}
     NianticSpatial.NSDK.AR.NsdkSettings: {fileID: 11400000, guid: dc01477bf1774485f8d0c977a805e26b, type: 2}
