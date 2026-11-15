@@ -6,6 +6,7 @@ import { detectObjects }           from './sam.js';
 import { saveDebugFrame }          from './annotate.js';
 import { logCall }                 from './log.js';
 import { PORT }                    from './config.js';
+import { transcribeVoice, VoiceTranscriptionError } from './voice.js';
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
@@ -45,6 +46,34 @@ app.post('/detect', requireToken, async (req, res) => {
   if (error) return res.status(502).json({ error });
 
   res.json({ frame_id, width, height, latency_ms: latencyMs, objects });
+});
+
+app.post('/voice/transcribe', requireToken,
+  express.raw({ type: 'application/octet-stream', limit: '1mb' }),
+  async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0)
+      return res.status(400).json({ error: 'Missing WAV recording.' });
+
+    try {
+      const result = await transcribeVoice(req.body);
+      res.json(result);
+    } catch (error) {
+      if (error instanceof VoiceTranscriptionError)
+        return res.status(error.statusCode).json({ error: error.publicMessage });
+      res.status(502).json({ error: 'Transcription service is unavailable.' });
+    } finally {
+      // Best-effort in-memory clearing; audio is never written to disk or logs.
+      req.body.fill(0);
+    }
+  });
+
+app.use((error, _req, res, next) => {
+  if (error?.type === 'entity.too.large')
+    return res.status(413).json({ error: 'WAV recording exceeds the upload limit.' });
+  if (_req.path === '/voice/transcribe')
+    return res.status(400).json({ error: 'Invalid transcription request.' });
+  next(error);
 });
 
 app.listen(PORT, () => console.log(`[server] relay listening on :${PORT}`));

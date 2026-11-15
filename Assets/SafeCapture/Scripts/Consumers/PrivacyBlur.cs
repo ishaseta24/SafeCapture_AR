@@ -18,6 +18,7 @@ public class PrivacyBlur : MonoBehaviour, IDetectionConsumer
 
     private ObjectSelectionManager _selectionManager;
     private readonly List<int> _selectedTrackIds = new List<int>();
+    private byte[] _failClosedRestoreBuffer;
 
     // Latest raw result from YOLO (written from detection thread, read in Update)
     private VisionResult _latestResult;
@@ -138,51 +139,149 @@ public class PrivacyBlur : MonoBehaviour, IDetectionConsumer
         {
             foreach (var sb in _smoothBoxes)
             {
-                // Only draw if visible enough (alpha > 0.1 avoids faint ghost boxes)
-                if (sb.alpha < 0.1f) continue;
-
-                int left   = Mathf.Clamp((int)(sb.nx1 * texture.width)  - _paddingPixels, 0, texture.width  - 1);
-                int right  = Mathf.Clamp((int)(sb.nx2 * texture.width)  + _paddingPixels, 0, texture.width  - 1);
-                int top    = Mathf.Clamp((int)(sb.ny1 * texture.height) - _paddingPixels, 0, texture.height - 1);
-                int bottom = Mathf.Clamp((int)(sb.ny2 * texture.height) + _paddingPixels, 0, texture.height - 1);
-
-                // Detection y = top-down; texture y = bottom-up
-                int texBottom = texture.height - 1 - bottom;
-                int texTop    = texture.height - 1 - top;
-
-                // Scale block size by alpha so fading boxes pixelate more coarsely
-                int block = Mathf.Max(1, Mathf.RoundToInt(_blockSize * sb.alpha));
-                PixelateRegion(pixels, texture.width, texture.height, bytesPerPixel,
-                    left, texBottom, right, texTop, block);
+                if (_selectionManager != null
+                    && _selectionManager.GetClassMaskOverride(sb.label) == ClassMaskOverride.Unmask)
+                    continue;
+                PixelateSmoothBox(pixels, texture, bytesPerPixel, sb);
             }
-            return;
         }
-
-        // Manual selection fallback
-        if (_selectionManager == null || !_selectionManager.HasSelection) return;
-
-        if (_selectionManager.ShouldMaskFullFrame)
+        else
         {
-            PixelateRegion(pixels, texture.width, texture.height, bytesPerPixel,
-                0, 0, texture.width - 1, texture.height - 1, Mathf.Max(_blockSize, 24));
-            return;
+            if (_selectionManager == null) return;
+
+            bool hasSelection = _selectionManager.HasSelection;
+            bool failClosed = hasSelection && _selectionManager.ShouldMaskFullFrame;
+            byte[] originalPixels = null;
+            if (failClosed)
+            {
+                if (!_selectionManager.HasUnmaskClassOverride)
+                {
+                    PixelateRegion(pixels, texture.width, texture.height, bytesPerPixel,
+                        0, 0, texture.width - 1, texture.height - 1, Mathf.Max(_blockSize, 24));
+                    return;
+                }
+
+                // Preserve fail-closed masking for the rest of the image, then
+                // restore only explicitly unmasked detections below.
+                if (_failClosedRestoreBuffer == null
+                    || _failClosedRestoreBuffer.Length != pixels.Length)
+                    _failClosedRestoreBuffer = new byte[pixels.Length];
+                originalPixels = _failClosedRestoreBuffer;
+                for (int i = 0; i < pixels.Length; i++)
+                    originalPixels[i] = pixels[i];
+                PixelateRegion(pixels, texture.width, texture.height, bytesPerPixel,
+                    0, 0, texture.width - 1, texture.height - 1, Mathf.Max(_blockSize, 24));
+                RestoreUnmaskedClassDetections(pixels, originalPixels, texture, bytesPerPixel);
+            }
+
+            // Explicit class masks apply to every matching detection even when the
+            // default policy is manual selection.
+            PixelateExplicitlyMaskedClasses(pixels, texture, bytesPerPixel);
+            if (!hasSelection)
+                return;
+
+            _selectionManager.CopySelectedTrackIds(_selectedTrackIds);
+            foreach (int trackId in _selectedTrackIds)
+            {
+                if (_selectionManager.GetSelectedTrackClassMaskOverride(trackId) == ClassMaskOverride.Unmask)
+                    continue;
+
+                BoundingBox box; int sourceWidth, sourceHeight;
+                if (!_selectionManager.TryGetLastKnownDetection(trackId, out box, out sourceWidth, out sourceHeight)
+                    || box == null || sourceWidth <= 0 || sourceHeight <= 0) continue;
+
+                float sx = (float)texture.width / sourceWidth;
+                float sy = (float)texture.height / sourceHeight;
+                int left = Mathf.Clamp(Mathf.FloorToInt(box.x1 * sx) - _paddingPixels, 0, texture.width - 1);
+                int right = Mathf.Clamp(Mathf.CeilToInt(box.x2 * sx) + _paddingPixels, 0, texture.width - 1);
+                int top = Mathf.Clamp(Mathf.FloorToInt(box.y1 * sy) - _paddingPixels, 0, texture.height - 1);
+                int bottom = Mathf.Clamp(Mathf.CeilToInt(box.y2 * sy) + _paddingPixels, 0, texture.height - 1);
+                PixelateRegion(pixels, texture.width, texture.height, bytesPerPixel,
+                    left, texture.height - 1 - bottom, right, texture.height - 1 - top, Mathf.Max(1, _blockSize));
+            }
+
+            if (originalPixels != null)
+            {
+                System.Array.Clear(originalPixels, 0, originalPixels.Length);
+            }
         }
+    }
 
-        _selectionManager.CopySelectedTrackIds(_selectedTrackIds);
-        foreach (int trackId in _selectedTrackIds)
+    private void PixelateSmoothBox(
+        NativeArray<byte> pixels, Texture2D texture, int bytesPerPixel, SmoothBox sb)
+    {
+        // Only draw if visible enough (alpha > 0.1 avoids faint ghost boxes).
+        if (sb.alpha < 0.1f) return;
+
+        int left = Mathf.Clamp((int)(sb.nx1 * texture.width) - _paddingPixels, 0, texture.width - 1);
+        int right = Mathf.Clamp((int)(sb.nx2 * texture.width) + _paddingPixels, 0, texture.width - 1);
+        int top = Mathf.Clamp((int)(sb.ny1 * texture.height) - _paddingPixels, 0, texture.height - 1);
+        int bottom = Mathf.Clamp((int)(sb.ny2 * texture.height) + _paddingPixels, 0, texture.height - 1);
+
+        // Detection y = top-down; texture y = bottom-up.
+        int texBottom = texture.height - 1 - bottom;
+        int texTop = texture.height - 1 - top;
+
+        // Scale block size by alpha so fading boxes pixelate more coarsely.
+        int block = Mathf.Max(1, Mathf.RoundToInt(_blockSize * sb.alpha));
+        PixelateRegion(pixels, texture.width, texture.height, bytesPerPixel,
+            left, texBottom, right, texTop, block);
+    }
+
+    private void PixelateExplicitlyMaskedClasses(
+        NativeArray<byte> pixels, Texture2D texture, int bytesPerPixel)
+    {
+        VisionResult result;
+        lock (_lock) result = _latestResult;
+        if (result?.objects == null || result.width <= 0 || result.height <= 0)
+            return;
+
+        float scaleX = (float)texture.width / result.width;
+        float scaleY = (float)texture.height / result.height;
+        foreach (VisionObject obj in result.objects)
         {
-            BoundingBox box; int sourceWidth, sourceHeight;
-            if (!_selectionManager.TryGetLastKnownDetection(trackId, out box, out sourceWidth, out sourceHeight)
-                || box == null || sourceWidth <= 0 || sourceHeight <= 0) continue;
+            if (obj == null || obj.box == null || obj.falseDetection
+                || _selectionManager.GetClassMaskOverride(obj.label) != ClassMaskOverride.Mask)
+                continue;
 
-            float sx = (float)texture.width  / sourceWidth;
-            float sy = (float)texture.height / sourceHeight;
-            int left   = Mathf.Clamp(Mathf.FloorToInt(box.x1 * sx) - _paddingPixels, 0, texture.width  - 1);
-            int right  = Mathf.Clamp(Mathf.CeilToInt (box.x2 * sx) + _paddingPixels, 0, texture.width  - 1);
-            int top    = Mathf.Clamp(Mathf.FloorToInt(box.y1 * sy) - _paddingPixels, 0, texture.height - 1);
-            int bottom = Mathf.Clamp(Mathf.CeilToInt (box.y2 * sy) + _paddingPixels, 0, texture.height - 1);
+            int left = Mathf.Clamp(Mathf.FloorToInt(obj.box.x1 * scaleX) - _paddingPixels, 0, texture.width - 1);
+            int right = Mathf.Clamp(Mathf.CeilToInt(obj.box.x2 * scaleX) + _paddingPixels, 0, texture.width - 1);
+            int top = Mathf.Clamp(Mathf.FloorToInt(obj.box.y1 * scaleY) - _paddingPixels, 0, texture.height - 1);
+            int bottom = Mathf.Clamp(Mathf.CeilToInt(obj.box.y2 * scaleY) + _paddingPixels, 0, texture.height - 1);
             PixelateRegion(pixels, texture.width, texture.height, bytesPerPixel,
                 left, texture.height - 1 - bottom, right, texture.height - 1 - top, Mathf.Max(1, _blockSize));
+        }
+    }
+
+    private void RestoreUnmaskedClassDetections(
+        NativeArray<byte> pixels, byte[] originalPixels, Texture2D texture, int bytesPerPixel)
+    {
+        VisionResult result;
+        lock (_lock) result = _latestResult;
+        if (result?.objects == null || result.width <= 0 || result.height <= 0)
+            return;
+
+        float scaleX = (float)texture.width / result.width;
+        float scaleY = (float)texture.height / result.height;
+        foreach (VisionObject obj in result.objects)
+        {
+            if (obj == null || obj.box == null || obj.falseDetection
+                || _selectionManager.GetClassMaskOverride(obj.label) != ClassMaskOverride.Unmask)
+                continue;
+
+            int left = Mathf.Clamp(Mathf.FloorToInt(obj.box.x1 * scaleX) - _paddingPixels, 0, texture.width - 1);
+            int right = Mathf.Clamp(Mathf.CeilToInt(obj.box.x2 * scaleX) + _paddingPixels, 0, texture.width - 1);
+            int top = Mathf.Clamp(Mathf.FloorToInt(obj.box.y1 * scaleY) - _paddingPixels, 0, texture.height - 1);
+            int bottom = Mathf.Clamp(Mathf.CeilToInt(obj.box.y2 * scaleY) + _paddingPixels, 0, texture.height - 1);
+            int texBottom = texture.height - 1 - bottom;
+            int texTop = texture.height - 1 - top;
+            for (int y = texBottom; y <= texTop; y++)
+            for (int x = left; x <= right; x++)
+            {
+                int offset = (y * texture.width + x) * bytesPerPixel;
+                for (int channel = 0; channel < bytesPerPixel; channel++)
+                    pixels[offset + channel] = originalPixels[offset + channel];
+            }
         }
     }
 

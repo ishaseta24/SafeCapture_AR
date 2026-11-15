@@ -4807,6 +4807,7 @@ GameObject:
   - component: {fileID: 1281511375}
   - component: {fileID: 1281511378}
   - component: {fileID: 1281511379}
+  - component: {fileID: 2450010000}
   m_Layer: 0
   m_Name: SafeCapture
   m_TagString: Untagged
@@ -4877,6 +4878,7 @@ MonoBehaviour:
   _pauseYoloLabel: {fileID: 1176848151}
   _pauseSamButton: {fileID: 1542313572}
   _pauseSamLabel: {fileID: 1634410236}
+  _voiceRecognizer: {fileID: 2450010000}
 --- !u!4 &1281511377
 Transform:
   m_ObjectHideFlags: 0
@@ -4928,6 +4930,19 @@ MonoBehaviour:
   - laptop
   - tv
   - WaterBottle
+--- !u!114 &2450010000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1281511374}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cf52a15c62474aa1b4ed3bf9ea8f6a70, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  _selectionManager: {fileID: 128625962}
 --- !u!1 &1287110836
 GameObject:
   m_ObjectHideFlags: 0
