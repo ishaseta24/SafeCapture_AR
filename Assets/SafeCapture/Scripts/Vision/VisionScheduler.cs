@@ -27,11 +27,17 @@ public class VisionScheduler : MonoBehaviour
     public int   SamLastObjectCount { get; private set; }
     public float SamNextAllowedIn   { get; private set; }
 
-    public bool  YoloPaused { get; private set; }
-    public bool  SamPaused  { get; private set; }
+    public bool          YoloPaused    { get; private set; }
+    public bool          SamPaused     { get; private set; }
+    public VisionResult  LatestResult  => _latestYoloResult;
 
     public float YoloIntervalSec    => _yoloIntervalSec;
     public float SamVerifyIntervalSec => _samVerifyIntervalSec;
+
+    public bool EnsureDetectionLabel(string label)
+    {
+        return _yoloProvider != null && _yoloProvider.AddRuntimeTargetLabel(label);
+    }
 
     public void SetYoloInterval(float seconds)
     {

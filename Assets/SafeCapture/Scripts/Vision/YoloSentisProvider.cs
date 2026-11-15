@@ -1,10 +1,13 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Unity.InferenceEngine;
 using UnityEngine;
 
 // Local YOLOv8n inference via Unity Sentis (com.unity.ai.inference) — no network required.
+// Uses ScheduleIterable with a per-frame time budget so the main thread never blocks long
+// enough to freeze the video stream. PrivacyBlur lerp keeps masks smooth between detections.
 // Export model with: yolo export model=yolov8n.pt format=onnx simplify=True opset=12
 // Drop yolov8n.onnx into Assets/SafeCapture/Models/ and assign in Inspector.
 public class YoloSentisProvider : MonoBehaviour, IVisionProvider
@@ -17,11 +20,25 @@ public class YoloSentisProvider : MonoBehaviour, IVisionProvider
     [Tooltip("Only detect these labels. Leave empty to detect all 80 COCO classes.")]
     [SerializeField] private string[]    _targetLabels        = { "hand", "laptop", "tv", "cell phone", "cup", "bottle", "water bottle", "book", "remote", "apple" };
 
-    private const int InputSize = 640;
+    private const int    InputSize      = 640;
+    private const double FrameBudgetSec = 0.010; // max 10ms of inference work per frame
+
+    private readonly HashSet<string> _runtimeTargetLabels =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
     private Worker    _worker;
     private Texture2D _inputTex;
-    private float[]   _tensorData;
+    private float[]   _tensorData; // allocated once in Awake
+
+    public bool AddRuntimeTargetLabel(string label)
+    {
+        string canonical;
+        if (!CocoLabels.TryNormalizeVoiceName(label, out canonical))
+            return false;
+
+        _runtimeTargetLabels.Add(canonical);
+        return true;
+    }
 
     private void Awake()
     {
@@ -38,17 +55,27 @@ public class YoloSentisProvider : MonoBehaviour, IVisionProvider
 
     private void OnDestroy() => _worker?.Dispose();
 
+    // Kicks off a coroutine that runs inference in time-budgeted slices.
+    // Each frame we spend at most FrameBudgetSec on inference then yield,
+    // so the video stream is never blocked long enough to go blank.
     public Task<VisionResult> DetectAsync(byte[] jpegBytes, int originalWidth, int originalHeight)
     {
-        if (_worker == null) return null;
+        if (_worker == null) return Task.FromResult<VisionResult>(null);
+        var tcs = new TaskCompletionSource<VisionResult>();
+        StartCoroutine(RunInference(jpegBytes, originalWidth, originalHeight, tcs));
+        return tcs.Task;
+    }
 
-        var t0 = Time.realtimeSinceStartup;
+    private IEnumerator RunInference(byte[] jpegBytes, int origW, int origH,
+                                     TaskCompletionSource<VisionResult> tcs)
+    {
+        float t0 = Time.realtimeSinceStartup;
 
-        // 1. Decode JPEG → Texture2D
+        // 1. Decode JPEG → Texture2D (main thread)
         var raw = new Texture2D(2, 2);
         ImageConversion.LoadImage(raw, jpegBytes);
 
-        // 2. Resize to 640×640 via RenderTexture
+        // 2. Resize to 640×640 via GPU blit (main thread)
         var rt = RenderTexture.GetTemporary(InputSize, InputSize, 0, RenderTextureFormat.ARGB32);
         Graphics.Blit(raw, rt);
         RenderTexture.active = rt;
@@ -58,12 +85,11 @@ public class YoloSentisProvider : MonoBehaviour, IVisionProvider
         RenderTexture.ReleaseTemporary(rt);
         Destroy(raw);
 
-        // 3. Pixels → Tensor<float> [1, 3, 640, 640] normalized 0–1 (CHW)
-        // Unity GetPixels32() is bottom-up; YOLO expects top-down — flip Y.
+        // 3. Pixels → float[CHW], flip Y (Unity bottom-up → YOLO top-down)
         var pixels = _inputTex.GetPixels32();
         for (int y = 0; y < InputSize; y++)
         {
-            int srcRow = (InputSize - 1 - y) * InputSize; // flip Y
+            int srcRow = (InputSize - 1 - y) * InputSize;
             int dstRow = y * InputSize;
             for (int x = 0; x < InputSize; x++)
             {
@@ -74,26 +100,41 @@ public class YoloSentisProvider : MonoBehaviour, IVisionProvider
             }
         }
 
-        using var inputTensor = new Tensor<float>(new TensorShape(1, 3, InputSize, InputSize), _tensorData);
+        // 4. Schedule inference — iterate with per-frame time budget
+        // Many fast layers run per frame; we only yield when the budget is spent.
+        var inputTensor = new Tensor<float>(new TensorShape(1, 3, InputSize, InputSize), _tensorData);
+        var enumerator  = _worker.ScheduleIterable(inputTensor);
 
-        // 4. Run inference
-        _worker.Schedule(inputTensor);
+        double frameStart = Time.realtimeSinceStartupAsDouble;
+        while (enumerator.MoveNext())
+        {
+            if (Time.realtimeSinceStartupAsDouble - frameStart >= FrameBudgetSec)
+            {
+                yield return null; // hand control back — stream keeps running
+                frameStart = Time.realtimeSinceStartupAsDouble;
+            }
+        }
 
-        // 5. Read output — sync readback (safe on CPU backend, no Task/Awaitable mixing)
-        var outputTensor = _worker.PeekOutput() as Tensor<float>;
-        var readable     = outputTensor.ReadbackAndClone();
+        // 5. Readback + post-process (back on main thread after all layers done)
+        if (_worker.PeekOutput() is not Tensor<float> outputTensor)
+        {
+            inputTensor.Dispose();
+            tcs.SetResult(null);
+            yield break;
+        }
 
-        // 6. Post-process
-        var objects = PostProcess(readable, originalWidth, originalHeight);
+        var readable = outputTensor.ReadbackAndClone();
+        inputTensor.Dispose();
+
+        var objects = PostProcess(readable, origW, origH);
         readable.Dispose();
 
         float latencyMs = (Time.realtimeSinceStartup - t0) * 1000f;
-
-        return Task.FromResult(new VisionResult
+        tcs.SetResult(new VisionResult
         {
-            frame_id   = Guid.NewGuid().ToString("N").Substring(0, 8),
-            width      = originalWidth,
-            height     = originalHeight,
+            frame_id   = Guid.NewGuid().ToString("N")[..8],
+            width      = origW,
+            height     = origH,
             latency_ms = latencyMs,
             objects    = objects
         });
@@ -103,7 +144,6 @@ public class YoloSentisProvider : MonoBehaviour, IVisionProvider
 
     private VisionObject[] PostProcess(Tensor<float> output, int origW, int origH)
     {
-        // YOLOv8 output: [1, 84, 8400] — 4 box coords + 80 class scores per anchor
         int numAnchors = output.shape[2];
         var candidates = new List<(BoundingBox box, float score, int cls)>();
 
@@ -119,10 +159,9 @@ public class YoloSentisProvider : MonoBehaviour, IVisionProvider
 
             if (maxScore < _confidenceThreshold) continue;
 
-            // Filter to target labels if list is non-empty.
-            // Match if: Contains (bidirectional) OR Levenshtein distance ≤ 2.
             string detectedLabel = CocoLabels.Get(maxCls);
-            if (_targetLabels != null && _targetLabels.Length > 0)
+            if (_targetLabels != null && _targetLabels.Length > 0
+                && !_runtimeTargetLabels.Contains(detectedLabel))
             {
                 string detected = detectedLabel.Trim().ToLowerInvariant();
                 bool inList = false;
@@ -158,11 +197,11 @@ public class YoloSentisProvider : MonoBehaviour, IVisionProvider
             var (box, score, cls) = kept[i];
             result[i] = new VisionObject
             {
-                label = CocoLabels.Get(cls),
-                id = cls,
-                class_id = cls,
+                label      = CocoLabels.Get(cls),
+                id         = cls,
+                class_id   = cls,
                 confidence = score,
-                box = box
+                box        = box
             };
         }
         return result;

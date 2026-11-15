@@ -74,6 +74,15 @@ public class SafeCaptureUIController : MonoBehaviour
     [SerializeField] private InputField       _samIntervalInput;
     [SerializeField] private Button           _applySamTimingButton;
 
+    [Header("Side Status Panel")]
+    [SerializeField] private Text             _sideStatusLabel;
+
+    [Header("Voice Commands")]
+    [SerializeField] private VoiceCommandRecognizer _voiceRecognizer;
+    private Button _voiceRecordButton;
+    private Text _voiceRecordButtonLabel;
+    private Text _voiceStatusLabel;
+
     // ── Unity lifecycle ───────────────────────────────────────────────────────
 
     private void Awake()
@@ -98,6 +107,8 @@ public class SafeCaptureUIController : MonoBehaviour
         _pauseSamButton?.onClick.AddListener(OnPauseSamClicked);
         _applyYoloTimingButton?.onClick.AddListener(OnApplyYoloTimingClicked);
         _applySamTimingButton?.onClick.AddListener(OnApplySamTimingClicked);
+        EnsureVoiceControls();
+        _voiceRecordButton?.onClick.AddListener(OnVoiceRecordClicked);
     }
 
     private void OnDisable()
@@ -119,6 +130,7 @@ public class SafeCaptureUIController : MonoBehaviour
         _pauseSamButton?.onClick.RemoveListener(OnPauseSamClicked);
         _applyYoloTimingButton?.onClick.RemoveListener(OnApplyYoloTimingClicked);
         _applySamTimingButton?.onClick.RemoveListener(OnApplySamTimingClicked);
+        _voiceRecordButton?.onClick.RemoveListener(OnVoiceRecordClicked);
     }
 
     private void Start()
@@ -213,6 +225,12 @@ public class SafeCaptureUIController : MonoBehaviour
         RefreshUI();
     }
 
+    private void OnVoiceRecordClicked()
+    {
+        _voiceRecognizer?.ToggleRecording();
+        RefreshUI();
+    }
+
     // ── IP refresh ────────────────────────────────────────────────────────────
 
     private void OnRefreshIpClicked()
@@ -277,6 +295,13 @@ public class SafeCaptureUIController : MonoBehaviour
 
     private void RefreshUI()
     {
+        if (_voiceStatusLabel != null && _voiceRecognizer != null)
+            _voiceStatusLabel.text = _voiceRecognizer.Status;
+        if (_voiceRecordButtonLabel != null && _voiceRecognizer != null)
+            _voiceRecordButtonLabel.text = _voiceRecognizer.IsRecording ? "Stop Recording" : "Record Command";
+        if (_voiceRecordButton != null && _voiceRecognizer != null)
+            _voiceRecordButton.interactable = !_voiceRecognizer.IsBusy || _voiceRecognizer.IsRecording;
+
         if (_streamManager == null) return;
 
         var state = _streamManager.CurrentState;
@@ -335,5 +360,120 @@ public class SafeCaptureUIController : MonoBehaviour
             _startStreamButtonLabel.text = state == StreamManager.StreamState.Streaming
                 ? "Stop Streaming"
                 : "Start Streaming";
+
+        // Side status panel
+        if (_sideStatusLabel != null)
+            _sideStatusLabel.text = BuildSideStatus(state, frames, encMs);
+    }
+
+    private string BuildSideStatus(StreamManager.StreamState state, int frames, float encMs)
+    {
+        var sb = new System.Text.StringBuilder();
+
+        // ── Stream ──
+        sb.AppendLine("── Stream ──");
+        sb.AppendLine($"State:   {state}");
+        if (state == StreamManager.StreamState.Streaming)
+        {
+            sb.AppendLine($"Frames:  {frames}");
+            sb.AppendLine($"Encode:  {encMs:F1} ms");
+            sb.AppendLine($"Viewers: {_streamManager.ViewerCount}");
+        }
+
+        if (_visionScheduler == null) return sb.ToString();
+
+        // ── YOLO ──
+        sb.AppendLine();
+        sb.AppendLine("── YOLO ──");
+        sb.AppendLine($"Status:   {(_visionScheduler.YoloPaused ? "Paused" : "Running")}");
+        sb.AppendLine($"Interval: {_visionScheduler.YoloIntervalSec:F1}s");
+        sb.AppendLine($"Calls:    {_visionScheduler.YoloCallCount}");
+        sb.AppendLine($"Objects:  {_visionScheduler.YoloLastObjectCount}");
+        sb.AppendLine($"Latency:  {_visionScheduler.YoloLastLatencyMs:F0} ms");
+
+        // ── Meta SAM ──
+        sb.AppendLine();
+        sb.AppendLine("── Meta SAM ──");
+        sb.AppendLine($"Status:   {(_visionScheduler.SamPaused ? "Paused" : "Running")}");
+        sb.AppendLine($"Interval: {_visionScheduler.SamVerifyIntervalSec:F0}s");
+        sb.AppendLine($"Calls:    {_visionScheduler.SamCallCount}");
+        sb.AppendLine($"Objects:  {_visionScheduler.SamLastObjectCount}");
+        sb.AppendLine($"Next in:  {_visionScheduler.SamNextAllowedIn:F0}s");
+
+        // ── Detections ──
+        var result = _visionScheduler.LatestResult;
+        if (result?.objects != null && result.objects.Length > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("── Detections ──");
+            foreach (var obj in result.objects)
+            {
+                if (obj == null) continue;
+                string state2 = obj.falseDetection ? "✗" : obj.verified ? "✓" : "?";
+                sb.AppendLine($"{state2} {obj.label}");
+            }
+        }
+
+        return sb.ToString();
+    }
+
+    private void EnsureVoiceControls()
+    {
+        if (_voiceRecognizer == null)
+            _voiceRecognizer = FindObjectOfType<VoiceCommandRecognizer>();
+        if (_voiceRecognizer == null || _voiceRecordButton != null)
+            return;
+
+        Transform parent = _statusLabel != null ? _statusLabel.transform.parent : transform;
+        var buttonObject = new GameObject("VoiceRecordButton", typeof(RectTransform), typeof(CanvasRenderer),
+            typeof(Image), typeof(Button));
+        buttonObject.layer = parent.gameObject.layer;
+        buttonObject.transform.SetParent(parent, false);
+        var buttonRect = buttonObject.GetComponent<RectTransform>();
+        buttonRect.anchorMin = new Vector2(0f, 1f);
+        buttonRect.anchorMax = new Vector2(0f, 1f);
+        buttonRect.pivot = new Vector2(0f, 1f);
+        buttonRect.anchoredPosition = new Vector2(20f, -115f);
+        buttonRect.sizeDelta = new Vector2(360f, 78f);
+
+        Image image = buttonObject.GetComponent<Image>();
+        image.color = new Color(0.04f, 0.13f, 0.25f, 1f);
+        _voiceRecordButton = buttonObject.GetComponent<Button>();
+        _voiceRecordButton.targetGraphic = image;
+        Font voiceFont = _statusLabel != null ? _statusLabel.font : null;
+        _voiceRecordButtonLabel = CreateVoiceText(
+            "VoiceRecordButtonLabel", buttonRect, "Record Command", 32, TextAnchor.MiddleCenter,
+            new Vector2(0f, 0f), new Vector2(1f, 1f), Vector2.zero, Vector2.zero, voiceFont);
+
+        _voiceStatusLabel = CreateVoiceText(
+            "VoiceCommandStatus", parent, _voiceRecognizer.Status, 26, TextAnchor.UpperLeft,
+            new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(20f, -205f), new Vector2(1000f, 100f),
+            voiceFont);
+        RefreshUI();
+    }
+
+    private static Text CreateVoiceText(
+        string objectName, Transform parent, string initialText, int fontSize, TextAnchor alignment,
+        Vector2 anchorMin, Vector2 anchorMax, Vector2 position, Vector2 size, Font font)
+    {
+        var textObject = new GameObject(objectName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+        textObject.layer = parent.gameObject.layer;
+        textObject.transform.SetParent(parent, false);
+        var rect = textObject.GetComponent<RectTransform>();
+        rect.anchorMin = anchorMin;
+        rect.anchorMax = anchorMax;
+        rect.pivot = anchorMin;
+        rect.anchoredPosition = position;
+        rect.sizeDelta = size;
+        var text = textObject.GetComponent<Text>();
+        text.font = font != null ? font : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        text.fontSize = fontSize;
+        text.alignment = alignment;
+        text.color = Color.white;
+        text.horizontalOverflow = HorizontalWrapMode.Wrap;
+        text.verticalOverflow = VerticalWrapMode.Overflow;
+        text.raycastTarget = false;
+        text.text = initialText;
+        return text;
     }
 }
