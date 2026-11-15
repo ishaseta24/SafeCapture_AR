@@ -122,7 +122,7 @@ Articles (`the`, `a`, `an`, `my`) are stripped before label matching. The parser
 | M2 | ✅ | Meta SAM 3.1 integration — open-vocabulary detection via relay |
 | M3 | ✅ | Local YOLOv8n ONNX inference on-device via Unity Sentis |
 | M4 | ✅ | Smooth auto-masking, time-budgeted inference, click-to-select browser UI |
-| M5 | ✅ | Voice commands — "blur all screens", per-class mask rules, relay voice endpoint |
+| M5 | ✅ | Voice commands via Meta Muse — push-to-talk ASR, on-device NLP parser, per-class mask/unmask rules ("hide the laptop", "blur this") |
 | M6 | 🛠️ | Performance pass — smooth box rendering, blur hold, pixel-precise relay masking |
 
 ---
