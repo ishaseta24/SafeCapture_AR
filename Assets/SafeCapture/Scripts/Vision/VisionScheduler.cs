@@ -13,7 +13,7 @@ public class VisionScheduler : MonoBehaviour
     [SerializeField] private StreamManager      _streamManager;
     [SerializeField] private FrameCapture       _frameCapture;
     [SerializeField] private YoloSentisProvider _yoloProvider;
-    [SerializeField] private float              _yoloIntervalSec    = 0.5f;
+    [SerializeField] private float              _yoloIntervalSec    = 0.2f;
     [SerializeField] private float              _samVerifyIntervalSec = 15f;
     [SerializeField] private float              _verifyIouThreshold = 0.1f;
 
