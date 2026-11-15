@@ -31,7 +31,7 @@ The impact is broad:
 - **Automatic privacy blur** — all detections are pixelated by default; blur holds for 0.8 s after a detection is lost so single missed frames never cause a blink
 - **Click-to-select masking** — click any bounding box in the browser to toggle that object's blur individually
 - **Fail-closed mode** — if a selected object disappears, the full frame is pixelated until it is reacquired
-- **Voice commands** — say "blur all screens" or "unmask people" to set per-class masking rules hands-free
+- **Voice commands** — push-to-talk recording sent to Meta Muse (`muse-voice-transcribe-1.0`) via the authenticated relay; transcript is parsed on-device into per-class mask/unmask rules that apply immediately to the live stream
 - **Smooth rendering** — boxes lerp toward each new detection; blur regions are 15% larger than the box to absorb jitter
 
 ---
@@ -44,7 +44,8 @@ The impact is broad:
 | Engine | Unity 6000.0.55 + Meta XR SDK |
 | On-device inference | Unity Sentis — YOLOv8n ONNX (80 COCO classes) |
 | Cloud verification | Meta SAM 3.1 (open-vocabulary, via Node.js relay) |
-| Voice | Meta Voice SDK (Wit.ai) — `VoiceCommandRecognizer` + `VoiceCommandParser` |
+| Voice — ASR | Meta Muse `muse-voice-transcribe-1.0` via relay `/voice/transcribe` |
+| Voice — NLP | On-device `VoiceCommandParser` — 7 mask verbs, 7 unmask verbs, greedy COCO label match |
 | Relay server | Node.js 18 + Express + sharp.js |
 | Streaming protocol | MJPEG over HTTP — works in any browser with no plugin |
 | Privacy encoding | Pre-encode pixelation on `NativeArray<byte>` texture data before JPEG |
@@ -62,8 +63,9 @@ Quest 3 — Unity App
   │    ├─ SamRelayProvider    POST /detect → relay (optional SAM verification)
   │    └─ VisionObjectTracker assigns stable track IDs per detection instance
   │
-  ├─ VoiceCommandRecognizer  Meta Voice SDK mic listener
-  │    └─ VoiceCommandParser  maps utterances to per-class mask/unmask rules
+  ├─ VoiceCommandRecognizer  push-to-talk mic capture → 24 kHz mono PCM WAV
+  │    └─ POST /voice/transcribe → relay → Meta Muse muse-voice-transcribe-1.0
+  │    └─ VoiceCommandParser  on-device NLP → VoiceMaskCommand → ObjectSelectionManager
   │
   ├─ ObjectSelectionManager  browser click state + fail-closed track logic
   ├─ PrivacyBlur             smooth lerp boxes, 0.8 s hold, 15% padding, pixelate before encode
@@ -73,7 +75,7 @@ Quest 3 — Unity App
 Relay — Node.js (runs on laptop, optional)
   ├─ server.js    Express entry — POST /detect, POST /voice, GET /health
   ├─ sam.js       Meta SAM 3.1 API client + <|box;...|> token parser
-  ├─ voice.js     voice command relay endpoint
+  ├─ voice.js     POST /voice/transcribe → Meta Muse ASR → { transcript, final }
   ├─ auth.js      RELAY_TOKEN middleware
   ├─ limits.js    1-in-flight cap + daily API call limit
   ├─ log.js       JSONL call logger
@@ -82,6 +84,33 @@ Relay — Node.js (runs on laptop, optional)
 Browser
   └─ http://<quest-ip>:8080/   MJPEG stream — click boxes to toggle blur, voice rules apply live
 ```
+
+---
+
+## Voice Commands
+
+Voice commands use a push-to-talk flow — no always-on microphone, no local wake word. The audio never touches the app server; it goes directly to the authenticated relay and is wiped from memory immediately after the WAV is sent.
+
+**How it works end-to-end:**
+
+1. User taps **Record** in the headset UI (up to 8 s)
+2. Audio is downmixed to mono, resampled to 24 kHz, encoded as 16-bit PCM WAV on-device
+3. WAV is POSTed to relay `/voice/transcribe` over the authenticated channel (RELAY_TOKEN)
+4. Relay validates the WAV (mono, 16-bit PCM, 16 or 24 kHz, 0.2–15 s), then calls **Meta Muse** (`muse-voice-transcribe-1.0`) in `PUSH_TO_TALK` mode
+5. Transcript is returned to the headset; `VoiceCommandParser` extracts the intent on-device
+6. The resulting class mask rule is applied to `ObjectSelectionManager` — takes effect on the next encoded frame
+
+**Supported phrases:**
+
+| Intent | Trigger words | Example |
+|---|---|---|
+| Mask a class | mask · hide · block · cover · blur · censor · protect | *"hide the laptop"* |
+| Unmask a class | unmask · show · unhide · unblock · uncover · reveal · display | *"show person"* |
+| Target current object | "this" / "that" / "it" | *"blur this"* → resolves to the most confident live detection |
+
+Articles (`the`, `a`, `an`, `my`) are stripped before label matching. The parser tries up to 3-word COCO phrases greedily, so both *"cell phone"* and *"laptop screen"* work. "this / that / it" resolves to the highest-confidence non-false detection in the latest YOLO result.
+
+**Audio privacy:** the WAV buffer is zeroed in memory immediately after the HTTP request is sent. The relay never logs audio — only the returned transcript and latency are written to `relay/logs/`.
 
 ---
 
