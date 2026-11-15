@@ -214,13 +214,25 @@ public sealed class VoiceCommandRecognizer : MonoBehaviour
                 return;
             }
 
+            // Resolve "this/that" (null label) → most confident current detection
+            string label = command.Label;
+            if (label == null)
+            {
+                label = GetMostProminentLabel();
+                if (label == null)
+                {
+                    SetStatus("No object detected yet. Point at something first, then say the command.");
+                    return;
+                }
+            }
+
             if (_selectionManager == null)
             {
                 SetStatus("Voice command could not be applied: masking is unavailable.");
                 return;
             }
 
-            if (_visionScheduler == null || !_visionScheduler.EnsureDetectionLabel(command.Label))
+            if (_visionScheduler == null || !_visionScheduler.EnsureDetectionLabel(label))
             {
                 SetStatus("Object detection is unavailable. No mask rule was applied.");
                 return;
@@ -229,13 +241,13 @@ public sealed class VoiceCommandRecognizer : MonoBehaviour
             ClassMaskOverride value = command.Type == VoiceMaskCommandType.Mask
                 ? ClassMaskOverride.Mask
                 : ClassMaskOverride.Unmask;
-            if (!_selectionManager.TrySetClassMaskOverride(command.Label, value))
+            if (!_selectionManager.TrySetClassMaskOverride(label, value))
             {
                 SetStatus("Unsupported object class. No mask state was changed.");
                 return;
             }
 
-            SetStatus($"{(value == ClassMaskOverride.Mask ? "Masked" : "Unmasked")} {command.Label}.");
+            SetStatus($"{(value == ClassMaskOverride.Mask ? "Masked" : "Unmasked")} {label}.");
         }
         catch (Exception)
         {
@@ -247,6 +259,27 @@ public sealed class VoiceCommandRecognizer : MonoBehaviour
             Array.Clear(wav, 0, wav.Length);
             request?.Dispose();
         }
+    }
+
+    // Returns the label of the most confident non-false detection from the latest YOLO result.
+    private string GetMostProminentLabel()
+    {
+        if (_visionScheduler == null) return null;
+        VisionResult result = _visionScheduler.LatestResult;
+        if (result?.objects == null) return null;
+
+        VisionObject best = null;
+        foreach (VisionObject obj in result.objects)
+        {
+            if (obj == null || obj.falseDetection) continue;
+            if (best == null || obj.confidence > best.confidence)
+                best = obj;
+        }
+
+        string canonical;
+        return best != null && CocoLabels.TryNormalizeVoiceName(best.label, out canonical)
+            ? canonical
+            : null;
     }
 
     private void ReleaseRecording()
