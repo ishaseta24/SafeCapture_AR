@@ -199,14 +199,6 @@ public class VPS2LocalizeDemo : MonoBehaviour
         }
 
         Debug.Log($"[STAGE 2] ✅ TryTrackAnchor succeeded — trackableId={_anchor?.trackableId}");
-        Debug.Log("[STAGE 3] Calling AppManager.SelectSite — scene will load additively...");
-
-        // Load the stop scene additively on top of OhloneHome
-        if (AppManager.Instance != null)
-            AppManager.Instance.SelectSite(location.Name, location.Payload);
-        else
-            Debug.LogWarning("[STAGE 3] ❌ AppManager.Instance is null — not in scene?");
-
         // Update the UI
         _sitesTargetListManager.transform.Find("ScrollList").gameObject.SetActive(false);
         _localizationStatusPanel.SetActive(true);
@@ -264,13 +256,11 @@ public class VPS2LocalizeDemo : MonoBehaviour
     
     private void ToggleAnchorMarker(TrackingState trackingState)
     {
-        bool testMode = QuestOhloneTestingManager.Instance != null && QuestOhloneTestingManager.Instance.IsTestMode;
         if (_refinedMarker != null)
             _refinedMarker.gameObject.SetActive(
                 trackingState == TrackingState.Tracking &&
                 _downloadMeshToggle.isOn &&
-                _showRefinedMarker &&
-                testMode);
+                _showRefinedMarker);
         if (_coarseMarker != null)
             _coarseMarker.gameObject.SetActive(trackingState != TrackingState.Tracking ||
                                                (trackingState == TrackingState.Tracking && _refinedMarker == null));

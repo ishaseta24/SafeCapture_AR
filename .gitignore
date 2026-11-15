@@ -90,3 +90,13 @@ Assets/XR/Settings/AuthBuildSettings.asset.meta
 
 data/log.txt
 data/tokens.json
+
+# M2 — relay secrets and generated output
+.env*
+!.env.example
+relay/prompts.json
+relay/debug/
+relay/logs/
+relay/node_modules/
+**/config.json
+!**/config.example.json

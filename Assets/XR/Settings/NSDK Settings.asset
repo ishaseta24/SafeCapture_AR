@@ -45,4 +45,4 @@ MonoBehaviour:
     _loopInfinitely: 0
     _startFrame: 0
     _endFrame: -1
-  _authBuildSettings: {fileID: 11400000, guid: b2f6fbacf59214ff8b965a7f777ee79e, type: 2}
+  _authBuildSettings: {fileID: 11400000, guid: 88b479b42654f4c6e87b428536faa118, type: 2}

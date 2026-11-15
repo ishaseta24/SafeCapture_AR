@@ -1,0 +1,19 @@
+AI
+
+https://dev.meta.ai/docs/overview?team_id=2554696441663768&project_id=1112294274860581
+
+SAM interval set to 30s (config.json) to conserve API credits during development.
+Change detectIntervalSec back to 3.0 for production.
+
+ART
+
+https://kenney.nl/assets
+https://quaternius.com/
+
+TO RUN 
+
+cd /Users/ishaseta/IS/HCILab/SafeCapture/SafeCapture/relay
+npm start
+
+
+
