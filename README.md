@@ -87,6 +87,41 @@ Browser
 
 ---
 
+## Detection Capabilities
+
+### YOLO (on-device) — fixed 80 COCO classes
+
+Runs locally on Quest 3 via Unity Sentis. No internet required. Detects exactly these categories:
+
+| Category | Objects |
+|---|---|
+| People | person |
+| Vehicles | bicycle, car, motorcycle, airplane, bus, train, truck, boat |
+| Street | traffic light, fire hydrant, stop sign, parking meter |
+| Animals | bird, cat, dog, horse, sheep, cow, elephant, bear, zebra, giraffe |
+| Electronics | tv, laptop, mouse, remote, keyboard, cell phone, microwave, oven, toaster |
+| Furniture | bench, chair, couch, potted plant, bed, dining table, toilet, sink, refrigerator |
+| Food | banana, apple, sandwich, orange, broccoli, carrot, hot dog, pizza, donut, cake, bottle, wine glass, cup, fork, knife, spoon, bowl |
+| Accessories | backpack, umbrella, handbag, tie, suitcase |
+| Sports | frisbee, skis, snowboard, sports ball, kite, baseball bat, baseball glove, skateboard, surfboard, tennis racket |
+| Other | book, clock, vase, scissors, teddy bear, hair drier, toothbrush |
+
+Cannot detect anything outside this list — no faces as a category (only "person"), no documents, no whiteboards.
+
+### Meta SAM 3.1 (cloud) — open vocabulary via prompts
+
+Detects **anything you describe in plain text** via the `prompts` field in `config.json`:
+
+```json
+"prompts": ["laptop screen", "phone screen"]
+```
+
+Any natural-language description works — `"face"`, `"whiteboard"`, `"document"`, `"ID card"`, `"credit card"`. No fixed class list.
+
+Its role in the pipeline is **verification**: it cross-checks YOLO detections using IoU. If SAM confirms a YOLO box → green (verified). If SAM doesn't find it → marked as false detection and hidden from the stream.
+
+---
+
 ## Voice Commands
 
 Voice commands use a push-to-talk flow — no always-on microphone, no local wake word. The audio never touches the app server; it goes directly to the authenticated relay and is wiped from memory immediately after the WAV is sent.
