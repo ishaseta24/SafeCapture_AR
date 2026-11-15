@@ -69,13 +69,13 @@ public class SafeCaptureUIController : MonoBehaviour
     [SerializeField] private Text             _pauseSamLabel;
 
     [Header("Vision — Timing")]
-    [SerializeField] private InputField       _yoloIntervalInput;
-    [SerializeField] private Button           _applyYoloTimingButton;
-    [SerializeField] private InputField       _samIntervalInput;
-    [SerializeField] private Button           _applySamTimingButton;
+    [SerializeField] private Text             _yoloIntervalDisplay;
+    [SerializeField] private Button           _yoloDecButton;
+    [SerializeField] private Button           _yoloIncButton;
+    [SerializeField] private Text             _samIntervalDisplay;
+    [SerializeField] private Button           _samDecButton;
+    [SerializeField] private Button           _samIncButton;
 
-    [Header("Side Status Panel")]
-    [SerializeField] private Text             _sideStatusLabel;
 
     // ── Unity lifecycle ───────────────────────────────────────────────────────
 
@@ -99,8 +99,10 @@ public class SafeCaptureUIController : MonoBehaviour
 
         _pauseYoloButton?.onClick.AddListener(OnPauseYoloClicked);
         _pauseSamButton?.onClick.AddListener(OnPauseSamClicked);
-        _applyYoloTimingButton?.onClick.AddListener(OnApplyYoloTimingClicked);
-        _applySamTimingButton?.onClick.AddListener(OnApplySamTimingClicked);
+        _yoloDecButton?.onClick.AddListener(OnYoloDecClicked);
+        _yoloIncButton?.onClick.AddListener(OnYoloIncClicked);
+        _samDecButton?.onClick.AddListener(OnSamDecClicked);
+        _samIncButton?.onClick.AddListener(OnSamIncClicked);
     }
 
     private void OnDisable()
@@ -120,8 +122,10 @@ public class SafeCaptureUIController : MonoBehaviour
 
         _pauseYoloButton?.onClick.RemoveListener(OnPauseYoloClicked);
         _pauseSamButton?.onClick.RemoveListener(OnPauseSamClicked);
-        _applyYoloTimingButton?.onClick.RemoveListener(OnApplyYoloTimingClicked);
-        _applySamTimingButton?.onClick.RemoveListener(OnApplySamTimingClicked);
+        _yoloDecButton?.onClick.RemoveListener(OnYoloDecClicked);
+        _yoloIncButton?.onClick.RemoveListener(OnYoloIncClicked);
+        _samDecButton?.onClick.RemoveListener(OnSamDecClicked);
+        _samIncButton?.onClick.RemoveListener(OnSamIncClicked);
     }
 
     private void Start()
@@ -141,15 +145,6 @@ public class SafeCaptureUIController : MonoBehaviour
                 _qualitySlider.value = _frameCapture.JpegQuality;
                 SetQualityLabel(_frameCapture.JpegQuality);
             }
-        }
-
-        // Pre-fill timing inputs with current scheduler values
-        if (_visionScheduler != null)
-        {
-            if (_yoloIntervalInput != null)
-                _yoloIntervalInput.text = _visionScheduler.YoloIntervalSec.ToString("F1");
-            if (_samIntervalInput != null)
-                _samIntervalInput.text  = _visionScheduler.SamVerifyIntervalSec.ToString("F0");
         }
 
         ShowOverview();
@@ -188,19 +183,31 @@ public class SafeCaptureUIController : MonoBehaviour
 
     private void OnExitClicked() => Application.Quit();
 
-    private void OnApplyYoloTimingClicked()
+    private void OnYoloDecClicked()
     {
-        if (_visionScheduler == null || _yoloIntervalInput == null) return;
-        if (float.TryParse(_yoloIntervalInput.text, out float yolo))
-            _visionScheduler.SetYoloInterval(yolo);
+        if (_visionScheduler == null) return;
+        _visionScheduler.SetYoloInterval(_visionScheduler.YoloIntervalSec + 0.1f);
         RefreshUI();
     }
 
-    private void OnApplySamTimingClicked()
+    private void OnYoloIncClicked()
     {
-        if (_visionScheduler == null || _samIntervalInput == null) return;
-        if (float.TryParse(_samIntervalInput.text, out float sam))
-            _visionScheduler.SetSamInterval(sam);
+        if (_visionScheduler == null) return;
+        _visionScheduler.SetYoloInterval(_visionScheduler.YoloIntervalSec - 0.1f);
+        RefreshUI();
+    }
+
+    private void OnSamDecClicked()
+    {
+        if (_visionScheduler == null) return;
+        _visionScheduler.SetSamInterval(_visionScheduler.SamVerifyIntervalSec + 1f);
+        RefreshUI();
+    }
+
+    private void OnSamIncClicked()
+    {
+        if (_visionScheduler == null) return;
+        _visionScheduler.SetSamInterval(_visionScheduler.SamVerifyIntervalSec - 1f);
         RefreshUI();
     }
 
@@ -287,14 +294,7 @@ public class SafeCaptureUIController : MonoBehaviour
         // Status label
         int frames = _frameCapture != null ? _frameCapture.FrameCount : 0;
         float encMs = _frameCapture != null ? _frameCapture.LastEncodeMs : 0f;
-        string status = state switch
-        {
-            StreamManager.StreamState.Idle      => "Idle",
-            StreamManager.StreamState.Listening => "Server ready\nWaiting for viewers...",
-            StreamManager.StreamState.Streaming => $"Streaming  •  {_streamManager.ViewerCount} viewer(s)\nFrame #{frames}  |  Encode: {encMs:F1} ms",
-            _                                   => ""
-        };
-        if (_statusLabel != null) _statusLabel.text = status;
+        if (_statusLabel != null) _statusLabel.text = BuildSideStatus(state, frames, encMs);
 
         // IP label
         if (_ipLabel != null)
@@ -317,6 +317,10 @@ public class SafeCaptureUIController : MonoBehaviour
                 _pauseYoloLabel.text = _visionScheduler.YoloPaused ? "Resume YOLO" : "Pause YOLO";
             if (_pauseSamLabel != null)
                 _pauseSamLabel.text  = _visionScheduler.SamPaused  ? "Resume Meta" : "Pause Meta";
+            if (_yoloIntervalDisplay != null)
+                _yoloIntervalDisplay.text = $"{_visionScheduler.YoloIntervalSec:F1}s";
+            if (_samIntervalDisplay != null)
+                _samIntervalDisplay.text  = $"{_visionScheduler.SamVerifyIntervalSec:F0}s";
         }
 
         // Viewer count
@@ -340,8 +344,6 @@ public class SafeCaptureUIController : MonoBehaviour
                 : "Start Streaming";
 
         // Side status panel
-        if (_sideStatusLabel != null)
-            _sideStatusLabel.text = BuildSideStatus(state, frames, encMs);
     }
 
     private string BuildSideStatus(StreamManager.StreamState state, int frames, float encMs)
