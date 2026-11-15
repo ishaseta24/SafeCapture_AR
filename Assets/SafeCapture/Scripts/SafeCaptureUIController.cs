@@ -70,8 +70,9 @@ public class SafeCaptureUIController : MonoBehaviour
 
     [Header("Vision — Timing")]
     [SerializeField] private InputField       _yoloIntervalInput;
+    [SerializeField] private Button           _applyYoloTimingButton;
     [SerializeField] private InputField       _samIntervalInput;
-    [SerializeField] private Button           _applyTimingsButton;
+    [SerializeField] private Button           _applySamTimingButton;
 
     // ── Unity lifecycle ───────────────────────────────────────────────────────
 
@@ -95,7 +96,8 @@ public class SafeCaptureUIController : MonoBehaviour
 
         _pauseYoloButton?.onClick.AddListener(OnPauseYoloClicked);
         _pauseSamButton?.onClick.AddListener(OnPauseSamClicked);
-        _applyTimingsButton?.onClick.AddListener(OnApplyTimingsClicked);
+        _applyYoloTimingButton?.onClick.AddListener(OnApplyYoloTimingClicked);
+        _applySamTimingButton?.onClick.AddListener(OnApplySamTimingClicked);
     }
 
     private void OnDisable()
@@ -115,7 +117,8 @@ public class SafeCaptureUIController : MonoBehaviour
 
         _pauseYoloButton?.onClick.RemoveListener(OnPauseYoloClicked);
         _pauseSamButton?.onClick.RemoveListener(OnPauseSamClicked);
-        _applyTimingsButton?.onClick.RemoveListener(OnApplyTimingsClicked);
+        _applyYoloTimingButton?.onClick.RemoveListener(OnApplyYoloTimingClicked);
+        _applySamTimingButton?.onClick.RemoveListener(OnApplySamTimingClicked);
     }
 
     private void Start()
@@ -182,16 +185,19 @@ public class SafeCaptureUIController : MonoBehaviour
 
     private void OnExitClicked() => Application.Quit();
 
-    private void OnApplyTimingsClicked()
+    private void OnApplyYoloTimingClicked()
     {
-        if (_visionScheduler == null) return;
-
-        if (_yoloIntervalInput != null && float.TryParse(_yoloIntervalInput.text, out float yolo))
+        if (_visionScheduler == null || _yoloIntervalInput == null) return;
+        if (float.TryParse(_yoloIntervalInput.text, out float yolo))
             _visionScheduler.SetYoloInterval(yolo);
+        RefreshUI();
+    }
 
-        if (_samIntervalInput != null && float.TryParse(_samIntervalInput.text, out float sam))
+    private void OnApplySamTimingClicked()
+    {
+        if (_visionScheduler == null || _samIntervalInput == null) return;
+        if (float.TryParse(_samIntervalInput.text, out float sam))
             _visionScheduler.SetSamInterval(sam);
-
         RefreshUI();
     }
 
