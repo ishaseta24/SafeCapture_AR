@@ -1,6 +1,13 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+public enum ClassMaskOverride
+{
+    Inherit,
+    Mask,
+    Unmask
+}
+
 /// <summary>
 /// Owns selected detection instance IDs and resolves browser image clicks against
 /// the most recently published detection result.
@@ -13,6 +20,8 @@ public sealed class ObjectSelectionManager : MonoBehaviour, IDetectionConsumer
     private readonly Dictionary<int, int> _missedIntervals = new Dictionary<int, int>();
     private readonly Dictionary<int, LastKnownDetection> _lastKnownDetections =
         new Dictionary<int, LastKnownDetection>();
+    private readonly Dictionary<string, ClassMaskOverride> _classMaskOverrides =
+        new Dictionary<string, ClassMaskOverride>();
 
     private VisionResult _latestResult;
     private string _lastProcessedFrameId;
@@ -22,6 +31,7 @@ public sealed class ObjectSelectionManager : MonoBehaviour, IDetectionConsumer
         public BoundingBox box;
         public int width;
         public int height;
+        public string label;
     }
 
     public void OnDetectionResult(VisionResult result)
@@ -46,7 +56,8 @@ public sealed class ObjectSelectionManager : MonoBehaviour, IDetectionConsumer
                 {
                     box = current.box,
                     width = result.width,
-                    height = result.height
+                    height = result.height,
+                    label = current.label
                 };
                 _missedIntervals[trackId] = 0;
             }
@@ -117,7 +128,8 @@ public sealed class ObjectSelectionManager : MonoBehaviour, IDetectionConsumer
             {
                 box = best.box,
                 width = _latestResult.width,
-                height = _latestResult.height
+                height = _latestResult.height,
+                label = best.label
             };
         }
 
@@ -134,6 +146,52 @@ public sealed class ObjectSelectionManager : MonoBehaviour, IDetectionConsumer
     public bool IsSelected(int trackId) => _selectedTrackIds.Contains(trackId);
 
     public bool HasSelection => _selectedTrackIds.Count > 0;
+    public bool HasUnmaskClassOverride
+    {
+        get
+        {
+            foreach (ClassMaskOverride value in _classMaskOverrides.Values)
+                if (value == ClassMaskOverride.Unmask)
+                    return true;
+            return false;
+        }
+    }
+
+    public bool TrySetClassMaskOverride(string label, ClassMaskOverride value)
+    {
+        if (value != ClassMaskOverride.Inherit
+            && value != ClassMaskOverride.Mask
+            && value != ClassMaskOverride.Unmask)
+            return false;
+
+        string canonical;
+        if (!CocoLabels.TryNormalizeVoiceName(label, out canonical))
+            return false;
+
+        if (value == ClassMaskOverride.Inherit)
+            _classMaskOverrides.Remove(canonical);
+        else
+            _classMaskOverrides[canonical] = value;
+        return true;
+    }
+
+    public ClassMaskOverride GetClassMaskOverride(string label)
+    {
+        string canonical;
+        ClassMaskOverride value;
+        return CocoLabels.TryNormalizeVoiceName(label, out canonical)
+            && _classMaskOverrides.TryGetValue(canonical, out value)
+                ? value
+                : ClassMaskOverride.Inherit;
+    }
+
+    public ClassMaskOverride GetSelectedTrackClassMaskOverride(int trackId)
+    {
+        LastKnownDetection detection;
+        return _lastKnownDetections.TryGetValue(trackId, out detection)
+            ? GetClassMaskOverride(detection.label)
+            : ClassMaskOverride.Inherit;
+    }
 
     public bool ShouldMaskFullFrame
     {
@@ -170,6 +228,26 @@ public sealed class ObjectSelectionManager : MonoBehaviour, IDetectionConsumer
         box = null;
         width = 0;
         height = 0;
+        return false;
+    }
+
+    public bool TryGetLastKnownDetection(
+        int trackId, out BoundingBox box, out int width, out int height, out string label)
+    {
+        LastKnownDetection detection;
+        if (_lastKnownDetections.TryGetValue(trackId, out detection))
+        {
+            box = detection.box;
+            width = detection.width;
+            height = detection.height;
+            label = detection.label;
+            return true;
+        }
+
+        box = null;
+        width = 0;
+        height = 0;
+        label = null;
         return false;
     }
 
