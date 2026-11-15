@@ -5,6 +5,8 @@ using Unity.InferenceEngine;
 using UnityEngine;
 
 // Local YOLOv8n inference via Unity Sentis (com.unity.ai.inference) — no network required.
+// Runs synchronously on the main thread. Use _yoloIntervalSec >= 0.5s to keep video smooth.
+// The PrivacyBlur box-lerp handles visual continuity between inference calls.
 // Export model with: yolo export model=yolov8n.pt format=onnx simplify=True opset=12
 // Drop yolov8n.onnx into Assets/SafeCapture/Models/ and assign in Inspector.
 public class YoloSentisProvider : MonoBehaviour, IVisionProvider
@@ -21,7 +23,7 @@ public class YoloSentisProvider : MonoBehaviour, IVisionProvider
 
     private Worker    _worker;
     private Texture2D _inputTex;
-    private float[]   _tensorData;
+    private float[]   _tensorData; // cached — allocated once, no per-frame GC
 
     private void Awake()
     {
@@ -40,7 +42,7 @@ public class YoloSentisProvider : MonoBehaviour, IVisionProvider
 
     public Task<VisionResult> DetectAsync(byte[] jpegBytes, int originalWidth, int originalHeight)
     {
-        if (_worker == null) return null;
+        if (_worker == null) return Task.FromResult<VisionResult>(null);
 
         var t0 = Time.realtimeSinceStartup;
 
@@ -58,12 +60,11 @@ public class YoloSentisProvider : MonoBehaviour, IVisionProvider
         RenderTexture.ReleaseTemporary(rt);
         Destroy(raw);
 
-        // 3. Pixels → Tensor<float> [1, 3, 640, 640] normalized 0–1 (CHW)
-        // Unity GetPixels32() is bottom-up; YOLO expects top-down — flip Y.
+        // 3. Pixels → float[CHW], flip Y (Unity bottom-up → YOLO top-down)
         var pixels = _inputTex.GetPixels32();
         for (int y = 0; y < InputSize; y++)
         {
-            int srcRow = (InputSize - 1 - y) * InputSize; // flip Y
+            int srcRow = (InputSize - 1 - y) * InputSize;
             int dstRow = y * InputSize;
             for (int x = 0; x < InputSize; x++)
             {
@@ -74,14 +75,18 @@ public class YoloSentisProvider : MonoBehaviour, IVisionProvider
             }
         }
 
-        using var inputTensor = new Tensor<float>(new TensorShape(1, 3, InputSize, InputSize), _tensorData);
-
-        // 4. Run inference
+        // 4. Run inference — do NOT use 'using'; dispose input only after output is read
+        var inputTensor = new Tensor<float>(new TensorShape(1, 3, InputSize, InputSize), _tensorData);
         _worker.Schedule(inputTensor);
 
-        // 5. Read output — sync readback (safe on CPU backend, no Task/Awaitable mixing)
-        var outputTensor = _worker.PeekOutput() as Tensor<float>;
-        var readable     = outputTensor.ReadbackAndClone();
+        // 5. Sync readback
+        if (_worker.PeekOutput() is not Tensor<float> outputTensor)
+        {
+            inputTensor.Dispose();
+            return Task.FromResult<VisionResult>(null);
+        }
+        var readable = outputTensor.ReadbackAndClone();
+        inputTensor.Dispose(); // safe to dispose now — output has been read back
 
         // 6. Post-process
         var objects = PostProcess(readable, originalWidth, originalHeight);
@@ -91,7 +96,7 @@ public class YoloSentisProvider : MonoBehaviour, IVisionProvider
 
         return Task.FromResult(new VisionResult
         {
-            frame_id   = Guid.NewGuid().ToString("N").Substring(0, 8),
+            frame_id   = Guid.NewGuid().ToString("N")[..8],
             width      = originalWidth,
             height     = originalHeight,
             latency_ms = latencyMs,
@@ -103,7 +108,6 @@ public class YoloSentisProvider : MonoBehaviour, IVisionProvider
 
     private VisionObject[] PostProcess(Tensor<float> output, int origW, int origH)
     {
-        // YOLOv8 output: [1, 84, 8400] — 4 box coords + 80 class scores per anchor
         int numAnchors = output.shape[2];
         var candidates = new List<(BoundingBox box, float score, int cls)>();
 
@@ -119,8 +123,6 @@ public class YoloSentisProvider : MonoBehaviour, IVisionProvider
 
             if (maxScore < _confidenceThreshold) continue;
 
-            // Filter to target labels if list is non-empty.
-            // Match if: Contains (bidirectional) OR Levenshtein distance ≤ 2.
             string detectedLabel = CocoLabels.Get(maxCls);
             if (_targetLabels != null && _targetLabels.Length > 0)
             {
@@ -158,11 +160,11 @@ public class YoloSentisProvider : MonoBehaviour, IVisionProvider
             var (box, score, cls) = kept[i];
             result[i] = new VisionObject
             {
-                label = CocoLabels.Get(cls),
-                id = cls,
-                class_id = cls,
+                label      = CocoLabels.Get(cls),
+                id         = cls,
+                class_id   = cls,
                 confidence = score,
-                box = box
+                box        = box
             };
         }
         return result;
