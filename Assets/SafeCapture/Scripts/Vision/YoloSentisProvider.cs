@@ -23,9 +23,22 @@ public class YoloSentisProvider : MonoBehaviour, IVisionProvider
     private const int    InputSize      = 640;
     private const double FrameBudgetSec = 0.010; // max 10ms of inference work per frame
 
+    private readonly HashSet<string> _runtimeTargetLabels =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
     private Worker    _worker;
     private Texture2D _inputTex;
     private float[]   _tensorData; // allocated once in Awake
+
+    public bool AddRuntimeTargetLabel(string label)
+    {
+        string canonical;
+        if (!CocoLabels.TryNormalizeVoiceName(label, out canonical))
+            return false;
+
+        _runtimeTargetLabels.Add(canonical);
+        return true;
+    }
 
     private void Awake()
     {
@@ -147,7 +160,8 @@ public class YoloSentisProvider : MonoBehaviour, IVisionProvider
             if (maxScore < _confidenceThreshold) continue;
 
             string detectedLabel = CocoLabels.Get(maxCls);
-            if (_targetLabels != null && _targetLabels.Length > 0)
+            if (_targetLabels != null && _targetLabels.Length > 0
+                && !_runtimeTargetLabels.Contains(detectedLabel))
             {
                 string detected = detectedLabel.Trim().ToLowerInvariant();
                 bool inList = false;
