@@ -1,259 +1,267 @@
 # SafeCapture
 
-**Real-time privacy protection for XR cameras — built on Meta Quest 3.**
+**A programmable privacy layer for camera glasses.**
 
-SafeCapture detects sensitive objects (screens, documents, faces) through the Quest 3 passthrough camera and pixelates them before the frame is encoded or streamed — protecting bystanders automatically, in real time, on device.
+Describe in plain English what your camera should never capture. Test it. Then wear it.
 
 > Built at XR Hack 2026 by Isha Seta, Ananth Narasimhan, and Anu Srinivasan.
 
 ---
 
-## Idea & Impact
+## Inspiration
 
-As camera-equipped AR glasses spread — Meta Quest 3, Ray-Ban Meta, and what comes next — they introduce a new class of privacy risk: anyone wearing them can inadvertently capture and broadcast sensitive content. A meeting room screen, a colleague's document, a stranger's face in a coffee shop. Today there is no automatic protection. The person wearing the glasses has to remember to look away.
+Camera glasses went mainstream faster than the rules around them. Meta sold more than seven million smart glasses in 2025, and IDC forecasts display-less glasses will reach 13.6 million units in 2026, growing to 27.3 million by 2030.
 
-SafeCapture adds an automatic privacy layer directly on the headset. The camera feed never leaves the device unfiltered. Sensitive objects are detected using a local YOLO model, optionally verified by Meta SAM 3.1, and pixelated **before JPEG encoding** — so the stream that reaches a browser or recording is already clean.
+The people in front of those cameras never agreed to be filmed — and they know it:
 
-The impact is broad:
+- **72%** of Americans worry about being secretly recorded by camera-equipped wearables in public; only **20%** are confident they could recognize smart glasses
+- Only **4%** of owners say they always tell nearby people when they are recording
+- Two Harvard students built **I-XRAY** on Ray-Ban Meta glasses — automatically going from face, to name, to phone number, to home address
 
-- **Ethical egocentric data collection** — robot training data and lifelogging pipelines can be built without capturing private content
-- **Enterprise AR** — employees can use headsets in sensitive environments without IT worrying about screen capture
-- **Research** — HCI and accessibility researchers can record studies without manual redaction passes
-- **Everyday use** — bystanders are protected by default, without needing to consent or even be aware
+The world is reacting with bans:
 
----
+- MSC Cruises and Royal Caribbean restrict smart glasses in public areas, restrooms, youth areas, medical areas, and casinos
+- Philadelphia's First Judicial District banned all smart glasses with recording capabilities from courthouses (effective 30 March 2026)
+- In the UK, Soho House clubs, ATG Theatres, and JD Wetherspoon have banned filming with smart glasses
+- One health system's security chief said they prohibit unapproved smart glasses in their facilities
 
-## What it does
+Privacy is also what holds buyers back: **56%** of people unlikely to buy smart glasses name privacy concerns as a reason.
 
-- **Live MJPEG stream** — Quest 3 passthrough camera streams to any browser over Wi-Fi; no app install needed on the viewer side
-- **On-device YOLO detection** — YOLOv8n runs locally on Quest via Unity Sentis (ONNX); no internet required for detection
-- **SAM verification** — optional Meta SAM 3.1 relay call cross-checks YOLO detections for higher confidence
-- **Automatic privacy blur** — all detections are pixelated by default; blur holds for 0.8 s after a detection is lost so single missed frames never cause a blink
-- **Click-to-select masking** — click any bounding box in the browser to toggle that object's blur individually
-- **Fail-closed mode** — if a selected object disappears, the full frame is pixelated until it is reacquired
-- **Voice commands** — push-to-talk recording sent to Meta Muse (`muse-voice-transcribe-1.0`) via the authenticated relay; transcript is parsed on-device into per-class mask/unmask rules that apply immediately to the live stream
-- **Smooth rendering** — boxes lerp toward each new detection; blur regions are 15% larger than the box to absorb jitter
+Banning the device throws away everything good about it — hands-free help for a nurse, a technician, a blind user. Warning lights don't work either, since only one in five people can recognize the glasses. We wanted the camera itself to respect people, so the glasses can stay on.
 
 ---
 
-## Platforms & Details
+## The Insight: Everyone Wants Different Rules
+
+Everyone we showed this to wanted something different:
+
+- A **vlogger** livestreaming their day wants bystanders and licence plates gone
+- A **doctor** wants documents, X-rays and children's faces gone
+- A **streamer** wants a drink brand they dislike covered up
+- A **business owner** wants every face and screen blurred, except staff who opt in
+
+The answer isn't one more fixed filter. It's a **programmable privacy layer**: one engine, with every rule written in plain English.
+
+> *"Blur faces, but let people who show two peace signs unblur, so they can consent to be photographed."*
+
+That sentence becomes a live profile on the glasses in about a second.
+
+---
+
+## What It Does
+
+SafeCapture sits between the camera and everything after it — your screen, your recording, your livestream.
+
+### Private by default
+- Every face is blurred the moment it appears
+- **Fail-closed**: lost objects stay blurred, and the whole frame blurs during fast camera motion
+
+### Consent by gesture
+- ✌️✌️ and you're seen; 👎👎 and you disappear again
+- Consent lives only in memory for the session and is wiped on exit — only consenting people's face fingerprints are kept
+
+### Rules anyone can write
+- **Wearers** talk to their glasses: *"also blur screens"*, *"make it stronger"*, *"go back to default"* — a friendly voice confirms each change
+- **Business owners** type a policy into the dashboard: *"Blur every face and every screen; staff and visitors show a thumbs-up to be seen"* — they see exactly what changed, field by field
+- **Developers and AI agents** use the same five MCP tools: `list_capabilities`, `save_profile`, `test_profile`, `activate_profile`, `get_profile`
+
+### Test before you trust
+- One click (or one MCP call) runs a profile against synthetic moving-camera footage: slow pans, whip pans, zooms, and a 50-face crowd — no real person's video needed
+- Results come back in plain English: *"Tested on 3 moving-camera clips (660 frames): nobody was wrongly unblurred, and a face was briefly not fully covered in 1.8% of frames, mostly during fast camera motion"*
+
+### Any camera
+Runs live on **Mentra Live** glasses. Also takes webcams, USB cameras, and network streams (RTMP, SRT, RTSP). We prototyped the same pipeline on **Meta Quest 3**. One profile follows you across all of them.
+
+---
+
+## Real Scenarios
+
+- **Hospitals** — a nurse wears AI glasses for hands-free procedure guidance; patient faces, charts and monitors are removed before anything is saved
+- **Field work** — a technician's site-walk footage becomes an inspection report without customers' screens, whiteboards, or employees in it
+- **Public life** — a creator streams a city walk, and every passer-by is blurred unless they flash ✌️✌️ to be in the shot
+- **Families and schools** — a parent records a school event while other children's faces stay protected
+- **Venues** — a club, theatre, or cruise line could require a SafeCapture policy instead of a ban
+
+---
+
+## Platforms
+
+| Platform | Status | Notes |
+|---|---|---|
+| **Mentra Live** (glasses) | ✅ Live | USB camera feed, real-time blur at 30 fps, voice in/out |
+| **Meta Quest 3** | ✅ Prototyped | Passthrough camera, MJPEG stream, YOLO + SAM + voice |
+| Webcam / USB camera | ✅ | Any V4L2 or DirectShow device |
+| Network stream | ✅ | RTMP, SRT, RTSP |
+| Ray-Ban Meta | 🔜 | Planned |
+
+---
+
+## How We Built It
+
+```
+Claude / any MCP client · web dashboard · voice on the glasses · typing
+                            │
+                 MCP tools (one interface)
+                            │
+   profiles/*.yaml  (validated, tested, hot-reloaded in ~1 s)
+                            │
+ detect → track → consent memory → fail-closed blur
+                            │
+ in: Mentra Live (USB), webcam, any stream    out: screen, recording
+```
+
+| Component | Technology |
+|---|---|
+| Object detection | YOLOv8 — people and screens |
+| Face detection | InsightFace |
+| Gesture detection | MediaPipe |
+| Tracking & fail-closed | Hold-and-track logic, full-frame blur during fast motion |
+| Rules engine | YAML profiles, validated and hot-reloaded in ~1 s |
+| MCP interface | 5 tools: `list_capabilities`, `save_profile`, `test_profile`, `activate_profile`, `get_profile` |
+| Voice (glasses) | Glasses mic → local Whisper → Claude + MCP → live profile switch |
+| Dashboard | Profiles, plain-English rule editor, test results, start/stop, recording |
+| Evaluation | Synthetic moving-camera clips scored for missed faces and false unblurs |
+
+### Quest 3 prototype specifics
 
 | Layer | Technology |
 |---|---|
-| Headset | Meta Quest 3 |
 | Engine | Unity 6000.0.55 + Meta XR SDK |
 | On-device inference | Unity Sentis — YOLOv8n ONNX (80 COCO classes) |
-| Cloud verification | Meta SAM 3.1 (open-vocabulary, via Node.js relay) |
-| Voice — ASR | Meta Muse `muse-voice-transcribe-1.0` via relay `/voice/transcribe` |
-| Voice — NLP | On-device `VoiceCommandParser` — 7 mask verbs, 7 unmask verbs, greedy COCO label match |
-| Relay server | Node.js 18 + Express + sharp.js |
-| Streaming protocol | MJPEG over HTTP — works in any browser with no plugin |
-| Privacy encoding | Pre-encode pixelation on `NativeArray<byte>` texture data before JPEG |
+| Cloud verification | Meta SAM 3.1 open-vocabulary detection |
+| Voice ASR | Meta Muse `muse-voice-transcribe-1.0` via relay |
+| Voice NLP | On-device parser — 7 mask verbs, 7 unmask verbs, greedy COCO label match |
+| Streaming | MJPEG over HTTP |
+| Privacy encoding | Pre-encode pixelation on `NativeArray<byte>` before JPEG |
 
 ---
 
-## Architecture
+## Quest 3 Architecture
 
 ```
 Quest 3 — Unity App
-  ├─ FrameCapture            WebCamTexture → byte[] → PreEncodeFilter pipeline
-  │
-  ├─ VisionScheduler         timed detection loop, time-budgeted to avoid dropped frames
-  │    ├─ YoloSentisProvider  YOLOv8n ONNX inference on-device (Unity Sentis)
-  │    ├─ SamRelayProvider    POST /detect → relay (optional SAM verification)
-  │    └─ VisionObjectTracker assigns stable track IDs per detection instance
-  │
-  ├─ VoiceCommandRecognizer  push-to-talk mic capture → 24 kHz mono PCM WAV
-  │    └─ POST /voice/transcribe → relay → Meta Muse muse-voice-transcribe-1.0
-  │    └─ VoiceCommandParser  on-device NLP → VoiceMaskCommand → ObjectSelectionManager
-  │
-  ├─ ObjectSelectionManager  browser click state + fail-closed track logic
-  ├─ PrivacyBlur             smooth lerp boxes, 0.8 s hold, 15% padding, pixelate before encode
-  ├─ BoxOverlay              smooth lerp boxes drawn on frame before encode
-  └─ MjpegServer             HTTP server — MJPEG stream + /select click endpoint
+  ├─ FrameCapture            PassthroughCameraAccess → PreEncodeFilter pipeline
+  ├─ VisionScheduler         time-budgeted YOLO loop + SAM verification
+  │    ├─ YoloSentisProvider  YOLOv8n ONNX on-device (Unity Sentis)
+  │    ├─ SamRelayProvider    POST /detect → relay (Meta SAM 3.1)
+  │    └─ VisionObjectTracker stable track IDs per detection instance
+  ├─ VoiceCommandRecognizer  push-to-talk → 24 kHz mono PCM WAV → relay
+  │    └─ VoiceCommandParser  on-device NLP → class mask rule → ObjectSelectionManager
+  ├─ PrivacyBlur             smooth lerp, 0.8 s hold, 15% padding, pixelate before encode
+  ├─ BoxOverlay              smooth lerp boxes drawn on frame
+  └─ MjpegServer             MJPEG stream + /select click endpoint
 
-Relay — Node.js (runs on laptop, optional)
-  ├─ server.js    Express entry — POST /detect, POST /voice, GET /health
-  ├─ sam.js       Meta SAM 3.1 API client + <|box;...|> token parser
-  ├─ voice.js     POST /voice/transcribe → Meta Muse ASR → { transcript, final }
+Relay — Node.js (runs on laptop)
+  ├─ server.js    POST /detect, POST /voice/transcribe, GET /health
+  ├─ sam.js       Meta SAM 3.1 client
+  ├─ voice.js     Meta Muse ASR endpoint
   ├─ auth.js      RELAY_TOKEN middleware
-  ├─ limits.js    1-in-flight cap + daily API call limit
-  ├─ log.js       JSONL call logger
-  └─ annotate.js  SVG debug frame annotator (DEBUG_FRAMES=true)
-
-Browser
-  └─ http://<quest-ip>:8080/   MJPEG stream — click boxes to toggle blur, voice rules apply live
+  └─ limits.js    in-flight cap + daily API limit
 ```
 
 ---
 
 ## Detection Capabilities
 
-### YOLO (on-device) — fixed 80 COCO classes
-
-Runs locally on Quest 3 via Unity Sentis. No internet required. Detects exactly these categories:
+### YOLO (on-device) — 80 COCO classes
 
 | Category | Objects |
 |---|---|
 | People | person |
 | Vehicles | bicycle, car, motorcycle, airplane, bus, train, truck, boat |
-| Street | traffic light, fire hydrant, stop sign, parking meter |
-| Animals | bird, cat, dog, horse, sheep, cow, elephant, bear, zebra, giraffe |
 | Electronics | tv, laptop, mouse, remote, keyboard, cell phone, microwave, oven, toaster |
+| Animals | bird, cat, dog, horse, sheep, cow, elephant, bear, zebra, giraffe |
 | Furniture | bench, chair, couch, potted plant, bed, dining table, toilet, sink, refrigerator |
 | Food | banana, apple, sandwich, orange, broccoli, carrot, hot dog, pizza, donut, cake, bottle, wine glass, cup, fork, knife, spoon, bowl |
 | Accessories | backpack, umbrella, handbag, tie, suitcase |
 | Sports | frisbee, skis, snowboard, sports ball, kite, baseball bat, baseball glove, skateboard, surfboard, tennis racket |
 | Other | book, clock, vase, scissors, teddy bear, hair drier, toothbrush |
 
-Cannot detect anything outside this list — no faces as a category (only "person"), no documents, no whiteboards.
+### Meta SAM 3.1 — open vocabulary
 
-### Meta SAM 3.1 (cloud) — open vocabulary via prompts
-
-Detects **anything you describe in plain text** via the `prompts` field in `config.json`:
-
-```json
-"prompts": ["laptop screen", "phone screen"]
-```
-
-Any natural-language description works — `"face"`, `"whiteboard"`, `"document"`, `"ID card"`, `"credit card"`. No fixed class list.
-
-Its role in the pipeline is **verification**: it cross-checks YOLO detections using IoU. If SAM confirms a YOLO box → green (verified). If SAM doesn't find it → marked as false detection and hidden from the stream.
+Detects anything you describe: `"face"`, `"whiteboard"`, `"document"`, `"ID card"`, `"credit card"`. Configured via `prompts` in `config.json`. Used for verification — if SAM confirms a YOLO box → green; if not → marked false detection and hidden.
 
 ---
 
-## Voice Commands
+## Voice Commands (Quest 3)
 
-Voice commands use a push-to-talk flow — no always-on microphone, no local wake word. The audio never touches the app server; it goes directly to the authenticated relay and is wiped from memory immediately after the WAV is sent.
-
-**How it works end-to-end:**
-
-1. User taps **Record** in the headset UI (up to 8 s)
-2. Audio is downmixed to mono, resampled to 24 kHz, encoded as 16-bit PCM WAV on-device
-3. WAV is POSTed to relay `/voice/transcribe` over the authenticated channel (RELAY_TOKEN)
-4. Relay validates the WAV (mono, 16-bit PCM, 16 or 24 kHz, 0.2–15 s), then calls **Meta Muse** (`muse-voice-transcribe-1.0`) in `PUSH_TO_TALK` mode
-5. Transcript is returned to the headset; `VoiceCommandParser` extracts the intent on-device
-6. The resulting class mask rule is applied to `ObjectSelectionManager` — takes effect on the next encoded frame
-
-**Supported phrases:**
+Push-to-talk — no always-on microphone. Audio is zeroed from memory immediately after sending.
 
 | Intent | Trigger words | Example |
 |---|---|---|
 | Mask a class | mask · hide · block · cover · blur · censor · protect | *"hide the laptop"* |
 | Unmask a class | unmask · show · unhide · unblock · uncover · reveal · display | *"show person"* |
-| Target current object | "this" / "that" / "it" | *"blur this"* → resolves to the most confident live detection |
-
-Articles (`the`, `a`, `an`, `my`) are stripped before label matching. The parser tries up to 3-word COCO phrases greedily, so both *"cell phone"* and *"laptop screen"* work. "this / that / it" resolves to the highest-confidence non-false detection in the latest YOLO result.
-
-**Audio privacy:** the WAV buffer is zeroed in memory immediately after the HTTP request is sent. The relay never logs audio — only the returned transcript and latency are written to `relay/logs/`.
+| Current object | "this" / "that" / "it" | *"blur this"* |
 
 ---
 
-## Milestones
+## Challenges
 
-| Milestone | Status | Description |
-|---|---|---|
-| M1 | ✅ | MJPEG live stream from Quest 3 passthrough camera to browser |
-| M2 | ✅ | Meta SAM 3.1 integration — open-vocabulary detection via relay |
-| M3 | ✅ | Local YOLOv8n ONNX inference on-device via Unity Sentis |
-| M4 | ✅ | Smooth auto-masking, time-budgeted inference, click-to-select browser UI |
-| M5 | ✅ | Voice commands via Meta Muse — push-to-talk ASR, on-device NLP parser, per-class mask/unmask rules ("hide the laptop", "blur this") |
-| M6 | 🛠️ | Performance pass — smooth box rendering, blur hold, pixel-precise relay masking |
+- **Motion** — head-mounted cameras whip around constantly; single-frame detection leaks faces, so we built hold-and-track logic and full-frame blur during fast pans
+- **Consent without surveillance** — remembering who said yes, without building a face database; consent lives only in RAM for people who opted in and is wiped on exit
+- **Honesty** — when a rule asks for something the engine can't do yet, we report it instead of pretending
+- **Hardware** — camera crashes and flicker on Quest, and getting a glasses feed into the pipeline reliably
 
 ---
 
-## Future Implementation Goals
+## Accomplishments
 
-- **3D object persistence** — track detected objects in AR world space across frames so blur follows the object even when it temporarily leaves the YOLO detection window
-- **Pixel-precise masking** — relay-side Otsu threshold masking (`mask.js`) already prototyped; promotes from box-level to contour-level privacy blur
-- **Face detection** — dedicated face model for GDPR-grade face blurring without relying on COCO "person" class
-- **Ray-Ban Meta support** — extend the pipeline to camera glasses (ManageXR MDM integration); pitch becomes "privacy layer for the AI glasses people already wear"
-- **On-device anonymized export** — record redacted video with per-frame redaction provenance metadata for research datasets
-- **WebRTC streaming** — replace MJPEG with WebRTC for sub-100 ms latency and encrypted peer-to-peer delivery
-- **Consent UI** — opt-in overlay so bystanders can register preferences that the headset respects automatically
+- **Test before you trust** — any rule runs on synthetic footage in seconds, with zero people wrongly unblurred in every test run, explained in plain English
+- **Anyone can write a privacy rule** — a spoken sentence, a typed sentence, or one click becomes a live tested rule on the glasses in about a second
+- **Glasses to screen in ~1 second** at a steady 30 fps
+- **Crowd-proof** — a 50-face synthetic crowd went from leaking on every frame to leaking on 2–3 frames
+- **One engine, four ways in** — Claude, any MCP client, the dashboard, and voice — all through the same five tools
 
 ---
 
-## Running locally
+## What's Next
 
-### Prerequisites
+- **New detectors as new rules** — licence plates, documents, X-rays, brand logos, anyone can write them
+- **Fleet-wide policies** — an organisation pushes one profile to every pair of glasses it manages
+- **More devices** — Ray-Ban Meta, headsets, webcams, and livestream servers, all with the same profile
+- **3D object persistence** — track objects in AR world space across frames
+- **Pixel-precise masking** — relay-side Otsu masking already prototyped; promotes from box-level to contour-level blur
+- **WebRTC streaming** — replace MJPEG with WebRTC for sub-100 ms latency
 
-- Meta Quest 3 with developer mode enabled
-- Unity 6000.0.55 with Meta XR SDK and Unity Sentis
-- Node.js 18+
-- ADB connected to Quest over USB or Wi-Fi
+---
 
-### 1. Configure the relay (optional — needed for SAM verification and voice relay)
+## Running Locally
+
+### Mentra Live
 
 ```bash
-cd relay
-cp .env.example .env
-# edit .env — set MODEL_API_KEY and RELAY_TOKEN
-npm install
-npm start
+# Install dependencies
+pip install -r requirements.txt   # or see mentra/README.md
+
+# Start the pipeline
+python main.py --camera mentra
 ```
 
-### 2. Configure the Quest app
+### Meta Quest 3
 
-Create `config.json`:
+**Prerequisites:** Quest 3 (developer mode), Unity 6000.0.55 + Meta XR SDK + Unity Sentis, Node.js 18+, ADB
 
+```bash
+# 1. Start the relay (needed for SAM + voice)
+cd relay
+cp .env.example .env        # add MODEL_API_KEY and RELAY_TOKEN
+npm install && npm start
+
+# 2. Push config to Quest
+adb push config.json /sdcard/Android/data/com.Ohlone.Quest/files/config.json
+
+# 3. Build Unity project → Android → install → launch on Quest
+#    Tap Connect → Start Streaming → open http://<quest-ip>:8080/
+```
+
+`config.json` format:
 ```json
 {
-  "relayUrl": "http://<your-laptop-ip>:3000",
+  "relayUrl": "http://<laptop-ip>:3000",
   "relayToken": "<your-relay-token>",
-  "detectIntervalSec": 30,
   "maxImageWidth": 960,
-  "prompts": ["laptop screen", "phone screen"]
+  "prompts": ["laptop screen", "phone screen", "face"]
 }
-```
-
-Push to the Quest:
-
-```bash
-adb push config.json /sdcard/Android/data/com.Ohlone.Quest/files/config.json
-```
-
-### 3. Build and run
-
-- Build the Unity project for Android (Quest 3 target)
-- Install and launch on Quest
-- Tap **Connect** → note the IP → tap **Start Streaming**
-- Open `http://<quest-ip>:8080/` in any browser
-
-YOLO boxes appear after the first local inference. Click a box to toggle its blur. Say "blur all screens" to apply voice rules. SAM verification requires the relay running above.
-
----
-
-## Project structure
-
-```
-Assets/SafeCapture/Scripts/
-  Config/     AppConfig.cs               loads config.json from device or StreamingAssets
-  Vision/     VisionScheduler.cs         timed, time-budgeted detection loop
-              YoloSentisProvider.cs      on-device YOLOv8n ONNX via Unity Sentis
-              SamRelayProvider.cs        HTTP client for relay /detect
-              VisionObjectTracker.cs     stable per-instance track IDs
-              VisionResult.cs            result + bounding box structs
-              VoiceCommandParser.cs      maps voice utterances to class mask rules
-              IVisionProvider.cs         provider interface
-  Consumers/  PrivacyBlur.cs             smooth lerp boxes, blur hold, pixelate before encode
-              BoxOverlay.cs              smooth lerp boxes drawn on frame
-              ObjectSelectionManager.cs  browser selection state + fail-closed logic
-              IDetectionConsumer.cs      consumer interface
-  FrameCapture.cs                        WebCamTexture → PreEncodeFilter → JPEG pipeline
-  MjpegServer.cs                         MJPEG stream server + /select endpoint
-  VoiceCommandRecognizer.cs              Meta Voice SDK mic listener
-  StreamManager.cs                       server lifecycle
-  SafeCaptureUIController.cs             UI + status panel
-
-relay/src/
-  server.js    Express entry — /detect, /voice, /health
-  sam.js       Meta SAM 3.1 client + box token parser
-  voice.js     voice command endpoint
-  auth.js      token middleware
-  limits.js    in-flight cap + daily limit
-  log.js       JSONL call logger
-  annotate.js  debug frame annotator
 ```
 
 ---
@@ -264,12 +272,14 @@ MIT License — Copyright (c) 2026 Isha Seta, Ananth Narasimhan, Anu Srinivasan.
 
 ---
 
-## Secrets — never commit
+## Sources
 
-| File | Why |
-|---|---|
-| `relay/.env` | MODEL_API_KEY and RELAY_TOKEN |
-| `Assets/StreamingAssets/config.json` | relayToken for Quest |
-| `Assets/XR/Settings/AuthBuildSettings.asset` | NSDK access token |
-| `relay/debug/` | camera frames |
-| `relay/logs/` | call logs |
+- [Meta sold seven million smart glasses — Heise](https://www.heise.de)
+- [Smart glasses forecast 2026–2030 — IDC](https://www.idc.com)
+- [Security.org: 2026 Smart Glasses Market Report](https://www.security.org)
+- [ConsumerAffairs: survey on secret recording](https://www.consumeraffairs.com)
+- [I-XRAY facial recognition on Meta glasses — 404 Media](https://404media.co)
+- [Royal Caribbean smart glasses ban](https://www.royalcaribbeanblog.com)
+- [Philadelphia courthouse ban](https://www.courts.phila.gov)
+- [UK venues ban Meta glasses — The Guardian via Freevacy](https://freevacy.com)
+- [Smart glasses and healthcare privacy — Becker's](https://www.beckershospitalreview.com)
